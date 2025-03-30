@@ -1,0 +1,26 @@
+{
+  "name": "electron-test",
+  "version": "0.0.0",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "concurrently \"vite\" \"ping 127.0.0.1 -n 3 >nul && electron .\"",
+    "electron-dev": "electron .",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "active-win": "^8.2.1",
+    "electron-store": "^10.0.1",
+    "node-global-key-listener": "^0.3.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.1.2",
+    "electron": "^35.0.2",
+    "vite": "^6.2.1",
+    "vite-plugin-vue-devtools": "^7.7.2"
+  }
+}

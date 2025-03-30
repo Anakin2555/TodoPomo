@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      background-color: rgba(0, 0, 0, 0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: system-ui;
+      color: white;
+    }
+    .reminder-content {
+      text-align: center;
+      padding: 40px;
+      background-color: #252525;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    .reminder-text {
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+    .reminder-timer {
+      font-size: 18px;
+      color: #00F2EA;
+    }
+  </style>
+</head>
+<body>
+  <div class="reminder-content">
+    <div class="reminder-text" id="reminderText"></div>
+    <div class="reminder-timer">
+      <span id="timer"></span>s
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    ipcRenderer.on('reminder-data', (event, data) => {
+      document.getElementById('reminderText').textContent = data.text;
+      document.getElementById('timer').textContent = data.duration;
+      
+      let timeLeft = data.duration;
+      const timer = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer').textContent = timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          const audio = new Audio(data.audioPath);
+          audio.play().catch(err => console.error('Failed to play audio:', err));
+          setTimeout(() => window.close(), 1000);
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html> 
