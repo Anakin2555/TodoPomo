@@ -67,7 +67,7 @@ defineExpose({
 }
 
 .time-range {
-  color: #00F2EA;
+  color: var(--primary-color);
   font-size: 14px;
 }
 

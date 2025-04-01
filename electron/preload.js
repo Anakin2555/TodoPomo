@@ -10,5 +10,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateTotalFocusTime: (time) => ipcRenderer.invoke('update-total-focus-time', time),
   updateTray: (data) => ipcRenderer.send('update-tray', data),
   addFocusRecord: (record) => ipcRenderer.invoke('add-focus-record', record),
-  loadFocusHistory: () => ipcRenderer.invoke('load-focus-history')
+  loadFocusHistory: () => ipcRenderer.invoke('load-focus-history'),
+  onSystemIdle: (callback) => {
+    ipcRenderer.on('system-idle', callback)
+  },
+  removeSystemIdleListener: (callback) => {
+    ipcRenderer.removeListener('system-idle', callback)
+  }
 }) 

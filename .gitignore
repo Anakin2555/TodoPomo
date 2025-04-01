@@ -11,6 +11,7 @@ node_modules
 .DS_Store
 dist
 dist-ssr
+app_client
 coverage
 *.local
 
@@ -28,3 +29,6 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+
+

@@ -3,17 +3,18 @@ import { ref, onUnmounted, computed, watch, onMounted } from 'vue'
 import IconYes from './icons/IconYes.vue'
 import IconDelete from './icons/IconDelete.vue'
 import IconStart from './icons/IconStart.vue'
+import IconEnd from './icons/IconEnd.vue'
 import FocusHistory from './FocusHistory.vue'
 
 
 // 计时器状态和配置
-const FOCUS_TIME = 40 * 60 /10; // 40分钟专注
-const SHORT_BREAK_TIME = 30 /10; // 30秒短休息
-const LONG_BREAK_TIME = 5 * 60 /10; // 5分钟长休息
-const SHORT_BREAK_INTERVAL = 15 * 60 /10; // 每15分钟提醒一次短休息
+const FOCUS_TIME = 40 * 60; // 40分钟专注
+const SHORT_BREAK_TIME = 30; // 30秒短休息
+const LONG_BREAK_TIME = 5 * 60; // 5分钟长休息
+const SHORT_BREAK_INTERVAL = 15 * 60; // 每15分钟提醒一次短休息
 
 const timeLeft = ref(FOCUS_TIME)
-const timeLeftMinutes = computed(() => Math.floor(timeLeft.value / 60))
+const timeLeftMinutes = computed(() => Math.floor((timeLeft.value-1) / 60))
 const isStart = ref(false)
 const isRunning = ref(false)
 const timer = ref(null)
@@ -39,11 +40,12 @@ const newTask = ref({
     })
 const tasks = ref([])
 
-// 记录上一次完成的分钟
-const lastCompletedMinute = ref(null);
 
 // 添加历史记录组件引用
 const historyRef = ref(null)
+
+// 添加开始时间变量
+const focusStartTime = ref(null)
 
 // 添加任务
 const addTask = async () => {
@@ -70,6 +72,8 @@ const updateTask = async (task) => {
   console.log({...task})
   await window.electronAPI.updateTask({...task})
 }
+
+
 
 // 更新总专注时间
 const updateTotalFocusTime = async (time) => {
@@ -119,6 +123,13 @@ const adjustSegments = (task, increment) => {
 }
 
 
+// 任务切换时保存专注记录
+watch(currentTask, (newTask, oldTask) => {
+  saveToStorage()
+})
+
+
+
 // 从弹窗中选择并设置任务
 const setTask = (task) => {
   currentTask.value = task
@@ -138,15 +149,19 @@ const closeTaskList = (event) => {
   }
 }
 
-// 添加事件监听
+// 挂载时添加事件监听
 onMounted(() => {
   document.addEventListener('click', closeTaskList);
-});
+  window.electronAPI.onSystemIdle(handleSystemIdle)
+  startTimer()
+})
 
 // 组件卸载时移除事件监听
 onUnmounted(() => {
   document.removeEventListener('click', closeTaskList);
-});
+  window.electronAPI.removeSystemIdleListener(handleSystemIdle)
+  resetTimer()
+})
 
 // 选择任务
 const showTaskList = ref(false)
@@ -183,13 +198,16 @@ const ControlTimer = () => {
 // 计时器功能
 const startTimer = () => {
   if (!isRunning.value) {
+    // 记录开始时间
+    if (!isStart.value) {
+      focusStartTime.value = new Date()
+    }
+    
     isRunning.value = true
     isStart.value = true
     timer.value = setInterval(() => {
       if (timeLeft.value > 0) {
         timeLeft.value--
-
-
         // 检查是否需要短休息提醒  
         // (剩余时间大于短休息时间间隔的60%时提醒,小于60%不提醒，例如短休息时间间隔10分钟，剩余时间大于6分钟时才进行短休息)
         if (currentMode.value === '专注'&&timeLeft.value>=SHORT_BREAK_INTERVAL*0.6) {
@@ -213,18 +231,49 @@ const pauseTimer = () => {
   isRunning.value = false
 }
 
-const resetTimer = () => {
-  pauseTimer()
-  timeLeft.value = modes[currentMode.value]
-  lastCompletedMinute.value = null
-  isStart.value = false
+
+// 保存专注记录
+const saveToStorage=async()=>{
+  const endTime = new Date()
+  const endTimeStr = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`
+  const startTimeStr = `${focusStartTime.value.getHours().toString().padStart(2, '0')}:${focusStartTime.value.getMinutes().toString().padStart(2, '0')}`
+  const duration = Math.floor((endTime - focusStartTime.value)/1000/60)
+  if(duration>5){
+    await window.electronAPI.addFocusRecord({
+      taskName: currentTask.value?.text || '专注',
+      startTime: startTimeStr,
+      endTime: endTimeStr,
+      duration: duration
+    })
+  }
 }
 
-const changeMode = (mode) => {
-  currentMode.value = mode
-  timeLeft.value = modes[mode]
+
+const resetTimer = async () => {
   pauseTimer()
+  console.log('resetTimer')
+
+  saveToStorage()
+  
+  // 重置开始时间
+  focusStartTime.value = null
+  
+  // 刷新历史记录
+  if (historyRef.value) {
+    historyRef.value.loadHistory()
+  }
+
+
+  timeLeft.value = modes[currentMode.value]
+  isStart.value = false
+  focusStartTime.value = null  // 重置开始时间
 }
+
+// const changeMode = (mode) => {
+//   currentMode.value = mode
+//   timeLeft.value = modes[mode]
+//   pauseTimer()
+// }
 
 // 修改休息提醒函数
 const notifyBreak = (breakType) => {
@@ -239,76 +288,49 @@ const notifyBreak = (breakType) => {
     duration: duration 
   })
 
-  // 休息结束后自动开始专注
-  setTimeout(() => {
-    if(breakType === 'short'){
-      startTimer()
-    }else if(breakType==='long'){
-      startFocus(currentTask.value)
-    }
-  }, duration * 1000 + 2000)
+  // // 休息结束后自动开始专注
+  // setTimeout(() => {
+
+  //   // 排除计时器未开始的情况（例如idle后已经结束计时器）
+  //   if(isStart.value){
+  //     if(breakType === 'short'){
+  //       startTimer()
+  //     }else if(breakType==='long'){
+  //       startFocus(currentTask.value)
+  //     }
+  //   }
+    
+  // }, duration * 1000 + 2000)
 }
 
 // 处理计时完成
 const handleTimerComplete = async () => {
-  clearInterval(timer.value)
-  isRunning.value = false
-  
-  // 记录本次专注
-  const now = new Date()
-  const endTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-  const startTime = new Date(now - FOCUS_TIME  * 1000)
-  const startTimeStr = `${startTime.getHours().toString().padStart(2, '0')}:${startTime.getMinutes().toString().padStart(2, '0')}`
-  
-  await window.electronAPI.addFocusRecord({
-    taskName: currentTask.value?.text || '专注',
-    startTime: startTimeStr,
-    endTime: endTime,
-    duration: Math.floor(FOCUS_TIME/60)
-  })
-  
-  // 刷新历史记录
-  if (historyRef.value) {
-    historyRef.value.loadHistory()
-  }
-  
-  endFocus()
+  resetTimer()
   
   if (currentMode.value === '专注' && currentTask.value) {
-    // // 更新已完成时间
-    // currentTask.value.completedTime += FOCUS_TIME / 60 // 转换为分钟
-    
-    // // 播放完成提示音
-    // new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3').play()
-    
     if (currentTask.value.completedTime >= currentTask.value.totalTime) {
       currentTask.value.completed = true
     }
-      
-    // focusCount.value++
-    // if (focusCount.value % 4 === 0) {
-    //   alert('专注完成！开始长休息时间')
-    //   startBreak(true)
-    // } else {
-    //   alert('专注完成！')
-    //   resetTimer()
-    // }
   }
-  
-  
   notifyBreak('long')
 }
 
 // 开始新任务
 const startNewTask = (task) => {
-  if (isRunning.value) {
-    const confirm = window.confirm('当前有正在进行的任务，是否切换到新任务？')
-    if (!confirm) return
+
+  if(currentTask.value?.id === task.id){
+    currentTask.value = null
   }
-  
-  currentTask.value = task
-  resetTimer()
-  startFocus(task)
+  // 如果正在计时，则需要确认是否切换任务
+  // if (isRunning.value) {
+  //   const confirm = window.confirm('当前有正在进行的任务，是否切换到新任务？')
+  //   if (!confirm) return
+  // }
+  else{
+    currentTask.value = task
+  }
+  // resetTimer()
+  // startFocus(task)
 }
 
 // 格式化时间
@@ -324,6 +346,7 @@ const formatTimeMinutes = (minutes) => {
     return `${String(Math.floor(minutes/60))}h ${String(minutes%60)}min`
   }
 }
+
 // 组件卸载时清理定时器
 onUnmounted(() => {
   if (timer.value) {
@@ -331,14 +354,11 @@ onUnmounted(() => {
   }
 })
 
-// 添加新的方法
-const extendTime = () => {
-  timeLeft.value += 5 * 60; // 增加5分钟
-}
+// // 添加新的方法
+// const extendTime = () => {
+//   timeLeft.value += 5 * 60; // 增加5分钟
+// }
 
-const endFocus = () => {
-  resetTimer();
-}
 
 // 设置目标工作时间（8小时 = 480分钟）
 const DAILY_FOCUS_TARGET = 8 * 60;
@@ -372,9 +392,9 @@ const progressOffset = computed(() => {
 
 // 监听计时器变化，以统计专注时间
 watch(timeLeftMinutes, (newVal, oldVal) => {
-    
-    // 如果分钟数发生变化，并且不是刚开始计时
-    if (lastCompletedMinute.value===oldVal && currentMode.value === '专注') {
+
+    // 如果分钟数减少，则增加专注时间,排除重置计时器的情况（oldVal<newVal）
+    if (oldVal>newVal && currentMode.value === '专注') {
       // 增加一分钟的专注时间
       totalFocusTime.value++;
       updateTotalFocusTime(totalFocusTime.value)
@@ -384,12 +404,12 @@ watch(timeLeftMinutes, (newVal, oldVal) => {
         currentTask.value.completedTime++;
         updateTask(currentTask.value)
       }
-
     }
-    lastCompletedMinute.value = newVal
+    
+    
 });
 
-// 在 script setup 中
+// 监听计时器变化，以更新托盘信息
 watch([timeLeft, isRunning], ([time, running]) => {
   // 更新托盘信息
   window.electronAPI.updateTray({
@@ -397,6 +417,22 @@ watch([timeLeft, isRunning], ([time, running]) => {
     isRunning: running
   })
 }, { immediate: true })
+
+// 在 setup 中添加
+const handleSystemIdle = (event, isIdle) => {
+
+  // 监测到idle
+  if (isIdle) {
+    // 重置计时器
+    resetTimer()
+
+    // 监测到active
+  }else if(!isIdle&&!isRunning.value){
+    // 重新开始计时器
+    startTimer()
+  }
+}
+
 
 </script>
 
@@ -416,7 +452,7 @@ watch([timeLeft, isRunning], ([time, running]) => {
         <svg class="progress-ring" width="320" height="320">
           <circle
             class="progress-ring__circle-bg"
-            stroke="#333"
+            stroke="var(--light-grey)"
             stroke-width="15"
             fill="transparent"
             r="145"
@@ -425,12 +461,13 @@ watch([timeLeft, isRunning], ([time, running]) => {
           />
           <circle
             class="progress-ring__circle"
-            stroke="#00F2EA"
+            stroke="var(--primary-color)"
             stroke-width="15"
             fill="transparent"
             r="145"
             cx="160"
             cy="160"
+            stroke-linecap="round"
             :style="{
               strokeDasharray: `${circumference} ${circumference}`,
               strokeDashoffset: progressOffset
@@ -472,14 +509,14 @@ watch([timeLeft, isRunning], ([time, running]) => {
       <!-- 计时器控制按钮 -->
       <div class="timer-controls">
         <button @click="ControlTimer" :class="isRunning ? 'primary-outline' : 'primary'">
-          {{ isRunning ? 'Pause' : 'Start Focus' }}
+          {{ isRunning ? 'Pause' : 'Start' }}
         </button>
       </div>
 
       <!-- 计时器扩展按钮 -->
       <div class="timer-actions">
         <!-- <button @click="extendTime" class="text-button">Extend (5 min)</button> -->
-        <button @click="endFocus" class="text-button" v-show="isStart">End Focus</button>
+        <!-- <button @click="handleTimerComplete" class="text-button" v-show="isStart">End Focus</button> -->
       </div>
     </div>
 
@@ -516,7 +553,12 @@ watch([timeLeft, isRunning], ([time, running]) => {
         </div>
 
         <div class="todo-list">
-          <div v-for="task in tasks" :key="task.id" class="todo-item">
+          <div 
+            v-for="task in tasks" 
+            :key="task.id" 
+            class="todo-item"
+            :class="{ 'active-task': currentTask?.id === task.id }"
+          >
             <div class="todo-content">
               <div class="task-details">
                 <span :class="{ completed: task.completed }">{{ task.text }}</span>
@@ -561,10 +603,11 @@ watch([timeLeft, isRunning], ([time, running]) => {
               <!-- 开始按钮 --> 
               <button 
                 @click="startNewTask(task)" 
-                :disabled="currentTask?.id === task.id && isRunning"
                 class="focus-button"
+                :class="{'focus-button-active': currentTask?.id === task.id}"
               >
-                <IconStart />
+                <IconEnd v-show="currentTask?.id === task.id" />
+                <IconStart v-show="currentTask?.id !== task.id" />
               </button> 
               
             </div>
@@ -610,26 +653,31 @@ watch([timeLeft, isRunning], ([time, running]) => {
     display: flex;
     flex-direction: row;
     justify-content: start;
-    align-items: center;
     gap: 100px;
     width: 100%;
+    height: 100vh;
     padding: 40px 8%;
-    background-color: #1E1E1E;
-    color: #FFFFFF;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh; /* 确保容器至少有一个视窗高度 */
   }
-  .right-section{
-    flex-grow: 2;
-  }
-  .todo-section{
-    min-width: 540px;
-    border-radius: 16px;
-  }
-  .timer-section{
+
+  .timer-section {
     width: 320px;
-    flex-grow: 1;
+    height: 100vh;
+    margin-top: 50vh;
+    transform: translateY(-50%); /* 垂直居中 */
+    height: fit-content; /* 高度适应内容 */
+    flex-shrink: 0; /* 防止被压缩 */
+    align-self: flex-start; /* 从顶部开始定位 */
   }
-  .todo-list{
-    max-height: 300px;
+
+  .right-section {
+    padding-top: 16vh;
+    flex-grow: 2;
+    overflow-y: auto; /* 右侧内容可滚动 */
+    max-height: 100vh; /* 限制最大高度为视窗高度 */
+    padding-right: 20px; /* 为滚动条留出空间 */
   }
 }
 
@@ -638,10 +686,11 @@ watch([timeLeft, isRunning], ([time, running]) => {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
-    background-color: #1E1E1E;
+    background-color: var(--dark-grey);
     color: #FFFFFF;
   }
   .todo-section{
+    margin-top: 50px;
     min-width: 500px;
   }
   .todo-list{
@@ -651,7 +700,6 @@ watch([timeLeft, isRunning], ([time, running]) => {
 
 .timer-section {
   text-align: center;
-  margin-bottom: 40px;
 }
 
 .timer-circle {
@@ -706,7 +754,7 @@ watch([timeLeft, isRunning], ([time, running]) => {
   width: 200px;
   max-height: 200px;
   overflow-y: auto;
-  background-color: #252525;
+  background-color: var(--mid-grey);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   padding: 8px 0;
@@ -721,7 +769,7 @@ watch([timeLeft, isRunning], ([time, running]) => {
 }
 
 .task-item:hover {
-  background-color: #333;
+  background-color: var(--light-grey);
 }
 
 /* 添加小三角形指示器 */
@@ -742,7 +790,7 @@ watch([timeLeft, isRunning], ([time, running]) => {
 }
 
 .task-list::-webkit-scrollbar-track {
-  background: #1E1E1E;
+  background: var(--dark-grey);
   border-radius: 3px;
 }
 
@@ -777,7 +825,7 @@ button {
 }
 
 .primary {
-  background-color: #00F2EA;
+  background-color: var(--primary-color);
   color: #000;
   padding: 12px 24px;
   font-weight: bold;
@@ -786,15 +834,15 @@ button {
 
 .primary-outline{
   background-color: transparent;
-  color: #00F2EA;
+  color: var(--primary-color);
   padding: 12px 24px;
   font-weight: bold;
   border-radius: 10px;
-  border: 2px solid #00F2EA;
+  border: 2px solid var(--primary-color);
 }
 
 .secondary {
-  background-color: #333;
+  background-color: var(--light-grey);
   color: #fff;
   padding: 12px 24px;
 }
@@ -839,20 +887,20 @@ button {
 
 .stat-progress {
   height: 4px;
-  background-color: #333;
+  background-color: var(--light-grey);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .stat-progress-bar {
   height: 100%;
-  background-color: #00F2EA;
+  background-color: var(--primary-color);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
 
 .todo-section {
-  background-color: #252525;
+  background-color: var(--mid-grey);
   border-radius: 10px;
   padding: 20px;
   padding-right: calc(20px + 8px); /* 原来的padding加上滚动条宽度 */
@@ -879,8 +927,8 @@ button {
 .todo-input input {
   flex: 1;
   height: 40px;  /* 设置固定高度 */
-  background-color: #1E1E1E;
-  border: 1px solid #333;
+  background-color: var(--dark-grey);
+  border: 1px solid var(--light-grey);
   color: #fff;
   box-sizing: border-box;
   padding: 0 12px;  /* 调整左右内边距 */
@@ -892,7 +940,7 @@ button {
 
 /* 添加焦点样式 */
 .todo-input input:focus {
-  border-color: #00F2EA;
+  border-color: var(--primary-color);
   outline: none;
 }
 
@@ -905,7 +953,7 @@ button {
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  background-color: #333;
+  background-color: var(--light-grey);
   color: #fff;
   box-sizing: border-box;
   border-radius: 6px;
@@ -917,7 +965,7 @@ button {
   width: 40px;
   height: 40px;
   box-sizing: border-box;
-  background-color: #333;
+  background-color: var(--light-grey);
   color: #fff;
   border-radius: 6px;
   font-size: 20px;
@@ -928,10 +976,35 @@ button {
 }
 .todo-item {
   padding: 15px;
-  border-bottom: 1px solid #333;
+  border-radius: 16px;
+  border-bottom: 1px solid var(--light-grey);
+  transition: background-color 0.3s ease;
 }
 .todo-item:hover .delete-button{
   opacity: 1;
+}
+
+.todo-item.active-task {
+  background-color: var(--primary-color-transparent);
+  /* 可选：添加边框突出显示 */
+}
+
+/* 可选：调整激活状态下的文字颜色 */
+.todo-item.active-task .task-details {
+  color: #000;
+}
+
+.todo-item.active-task .time-text{
+  color: #000;
+}
+
+/* 可选：调整激活状态下的进度条颜色 */
+.todo-item.active-task .progress-bar {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.todo-item.active-task .progress-fill {
+  background-color: #000;
 }
 
 .todo-content {
@@ -954,7 +1027,7 @@ button {
 }
 
 .task-score {
-  background-color: #333;
+  background-color: var(--light-grey);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 14px;
@@ -986,13 +1059,13 @@ button:hover:not(:disabled) {
 
 /* 滚动条轨道 */
 .todo-list::-webkit-scrollbar-track {
-  background: #1E1E1E;
+  background: var(--dark-grey);
   border-radius: 4px;
 }
 
 /* 滚动条滑块 */
 .todo-list::-webkit-scrollbar-thumb {
-  background: #333;
+  background: var(--light-grey);
   border-radius: 4px;
   transition: background 0.3s ease;
 }
@@ -1003,7 +1076,7 @@ button:hover:not(:disabled) {
 
 .mode-label {
   font-size: 16px;
-  color: #00F2EA;
+  color: var(--primary-color);
   margin-top: 8px;
 }
 
@@ -1014,24 +1087,26 @@ button:hover:not(:disabled) {
 }
 
 .focus-button {
-  background-color: #00F2EA;
-  color: #1E1E1E;
+  background-color: var(--primary-color);
+  color: var(--dark-grey);
   padding: 0px 16px;
   height: 28px;
   border-radius: 14px;
   font-size: 12px;
 }
 
-.focus-button:disabled {
-  background-color: #333;
+.focus-button-active {
+  background-color: var(--light-grey);
+  padding: 2px 16px 0px 16px;
   color: #666;
+  opacity: 1;
 }
 
 .delete-button {
   border-radius: 8px;
   opacity: 0;  /* 使用 opacity 代替 visibility */
   transition: opacity 0.2s ease;  /* 添加过渡效果，缩短时间 */
-  background-color: #333;
+  background-color: var(--light-grey);
   color: #666;
   height: 28px;
   padding: 4px;
@@ -1054,7 +1129,7 @@ button:hover:not(:disabled) {
   width: 24px;
   height: 24px;
   border-radius: 4px;
-  background-color: #333;
+  background-color: var(--light-grey);
   color: #fff;
   border: none;
   cursor: pointer;
@@ -1085,17 +1160,34 @@ button:hover:not(:disabled) {
 
 .progress-bar {
   height: 4px;
-  background-color: #333;
+  background-color: var(--light-grey);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background-color: #00F2EA;
+  background-color: var(--primary-color);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
 
+/* 自定义滚动条样式 */
+.right-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.right-section::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+.right-section::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+
+.right-section::-webkit-scrollbar-thumb:hover {
+  background: var(--hover-bg);
+}
 
 </style> 

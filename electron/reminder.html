@@ -3,58 +3,164 @@
 <head>
   <meta charset="UTF-8">
   <style>
+    :root {
+      --primary-color: #00F2EA;
+      --bg-primary: rgba(0, 0, 0, 0.85);
+      --text-primary: #FFFFFF;
+      --text-secondary: rgba(255, 255, 255, 0.7);
+    }
+
     body {
       margin: 0;
-      background-color: rgba(0, 0, 0, 0.9);
+      background-color: var(--bg-primary);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
-      font-family: system-ui;
-      color: white;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: var(--text-primary);
+      transition: opacity 0.3s ease;
+      animation: fadeIn 0.5s ease-out;
     }
+
     .reminder-content {
       text-align: center;
-      padding: 40px;
-      background-color: #252525;
-      border-radius: 16px;
+      padding: 48px;
+      background-color: rgba(37, 37, 37, 0.95);
+      border-radius: 24px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      transform: translateY(0);
+      animation: slideUp 0.5s ease-out;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
+
+    .reminder-icon {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 24px;
+      animation: pulse 2s infinite;
+    }
+
     .reminder-text {
-      font-size: 24px;
+      font-size: 28px;
+      font-weight: 600;
       margin-bottom: 16px;
+      color: var(--text-primary);
     }
+
+    .reminder-subtext {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+
     .reminder-timer {
-      font-size: 18px;
-      color: #00F2EA;
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--primary-color);
+      margin-bottom: 24px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 32px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background-color: var(--primary-color);
+      border-radius: 2px;
+      transition: width 1s linear;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+      }
+      100% {
+        transform: scale(1);
+      }
     }
   </style>
 </head>
 <body>
   <div class="reminder-content">
+    <svg class="reminder-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="var(--primary-color)" stroke-width="2"/>
+      <path d="M12 6V12L16 14" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+    </svg>
     <div class="reminder-text" id="reminderText"></div>
+    <div class="reminder-subtext">休息一下，让身心放松</div>
     <div class="reminder-timer">
-      <span id="timer"></span>s
+      <span id="timer"></span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
     </div>
   </div>
+
   <script>
     const { ipcRenderer } = require('electron');
     
     ipcRenderer.on('reminder-data', (event, data) => {
       document.getElementById('reminderText').textContent = data.text;
-      document.getElementById('timer').textContent = data.duration;
+      const totalDuration = data.duration;
+      let timeLeft = totalDuration;
       
-      let timeLeft = data.duration;
+      const updateProgress = (timeLeft) => {
+        const progress = (timeLeft / totalDuration) * 100;
+        document.getElementById('progressFill').style.width = `${progress}%`;
+      }
+      
       const timer = setInterval(() => {
         timeLeft--;
-        document.getElementById('timer').textContent = timeLeft;
+        const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+        const seconds = (timeLeft % 60).toString().padStart(2, '0');
+        document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+        updateProgress(timeLeft);
+        
         if (timeLeft <= 0) {
           clearInterval(timer);
           const audio = new Audio(data.audioPath);
           audio.play().catch(err => console.error('Failed to play audio:', err));
-          setTimeout(() => window.close(), 1000);
+          
+          // 添加淡出动画
+          document.body.style.opacity = '0';
+          setTimeout(() => window.close(), 500);
         }
       }, 1000);
+
+      // 初始化显示
+      const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+      const seconds = (timeLeft % 60).toString().padStart(2, '0');
+      document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+      updateProgress(timeLeft);
     });
   </script>
 </body>

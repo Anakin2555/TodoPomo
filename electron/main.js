@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu } = require('electron')
+const { GlobalKeyboardListener } = require('node-global-key-listener')
+const robot = require('robotjs')
 const path = require("path")
 const Store = require('electron-store').default
 
@@ -24,6 +26,56 @@ const store = new Store({
 
 let mainWindow
 let tray = null
+let lastActivityTime = Date.now()
+let lastMousePosition = robot.getMousePos()
+let activityCheckInterval
+let isIdle = false
+
+
+
+
+// 创建主窗口
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    icon: path.join(__dirname, 'assets/icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  })
+
+  // 加载应用
+
+  // 开发模式
+  mainWindow.loadURL("http://localhost:3002")
+
+  // 生产模式
+  // mainWindow.loadURL(`file://${path.join(__dirname, "../dist/index.html")}`);
+  
+  // 创建系统托盘
+  createTray()
+  
+  // 处理窗口关闭事件
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
+
+  setupActivityMonitoring()
+}
+
+
+
+
+
+
+
 
 // 创建提醒窗口的函数
 function createReminderWindow(text, duration) {
@@ -64,36 +116,101 @@ function createReminderWindow(text, duration) {
   setTimeout(() => {
     if (!reminderWindow.isDestroyed()) {
       reminderWindow.close()
+      isIdle = true
+      console.log('休息结束进入idle状态')
     }
   }, duration * 1000)
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      backgroundThrottling: false
+// 检查用户活动
+function checkUserActivity() {
+  try {
+    // 获取当前鼠标位置
+    const currentMousePos = robot.getMousePos()
+    
+    // 检查屏幕是否处于活动状态
+    const displays = screen.getAllDisplays()
+    const isScreenActive = displays.some(display => !display.internal || display.powerState === 'on')
+    
+    // 检查鼠标是否移动
+    const hasMouseMoved = 
+      currentMousePos.x !== lastMousePosition.x || 
+      currentMousePos.y !== lastMousePosition.y
+    
+    // 更新最后鼠标位置
+    lastMousePosition = currentMousePos
+    
+    const currentTime = Date.now()
+    const idleTime = currentTime - lastActivityTime
+    
+    // 如果检测到活动，更新时间
+    if (hasMouseMoved) {
+      updateLastActivity()
+      return
     }
-  })
-
-  // 加载应用
-  mainWindow.loadURL("http://localhost:3002")
-  
-  // 创建系统托盘
-  createTray()
-  
-  // 处理窗口关闭事件
-  mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
-      event.preventDefault()
-      mainWindow.hide()
+    
+    // 如果超过2分钟无活动且之前不是idle状态
+    if (idleTime > 6 * 60 * 1000 || !isScreenActive) {
+      isIdle = true
+      lastActivityTime = Date.now() // 防止idle后一直发送消息
+      console.log('进入idle状态')
+      // 通知渲染进程
+      mainWindow?.webContents.send('system-idle', true)
     }
-  })
+    
+  } catch (error) {
+    console.error('Error checking user activity:', error)
+  }
 }
+
+// 更新最后活动时间
+function updateLastActivity() {
+  const previousState = isIdle
+  lastActivityTime = Date.now()
+  isIdle = false
+  
+  // 如果状态从idle变为active，通知渲染进程
+  if (previousState) {
+    console.log('从idle状态恢复')
+    mainWindow?.webContents.send('system-idle', false)
+  }
+}
+
+// 设置活动监控
+function setupActivityMonitoring() {
+  try {
+
+    // // 创建全局键盘监听器
+    const keyboard = new GlobalKeyboardListener()
+    
+    // 监听键盘事件
+    keyboard.addListener(function(e) {
+      updateLastActivity()
+      
+    })
+
+
+    // 初始化最后鼠标位置
+    lastMousePosition = robot.getMousePos()
+    lastActivityTime = Date.now()
+    
+    // 设置检查间隔（每十秒检查一次）
+    activityCheckInterval = setInterval(checkUserActivity, 10000)
+    
+  } catch (error) {
+    console.error('Failed to setup activity monitoring:', error)
+  }
+}
+
+// 清理监控
+function cleanupActivityMonitoring() {
+  if (activityCheckInterval) {
+    clearInterval(activityCheckInterval)
+    activityCheckInterval = null
+  }
+}
+
+
 
 function createTray() {
   // 创建托盘图标
@@ -142,17 +259,22 @@ ipcMain.on('update-tray', (event, { time, isRunning }) => {
 // 监听渲染进程的消息
 ipcMain.on('show-break-reminder', (event, data) => {
   createReminderWindow(data.text, data.duration)
-  console.log(event,data)
+  // console.log(event,data)
 })
 
 // 获取当天日期字符串
 function getTodayString() {
-  return new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 // 获取或创建当天的记录
 function getTodayRecord() {
   const today = getTodayString()
+  console.log(today)
   const dailyRecords = store.get('dailyRecords', {})
   if (!dailyRecords[today]) {
     dailyRecords[today] = {
@@ -255,6 +377,7 @@ app.on(
 
 // 处理窗口全部关闭事件
 app.on('window-all-closed', () => {
+  cleanupActivityMonitoring()
   if (process.platform !== 'darwin') {
     app.quit()
   }
