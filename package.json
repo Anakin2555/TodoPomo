@@ -1,7 +1,6 @@
 {
   "name": "todo-pomo",
   "version": "0.0.1",
-  "private": true,
   "main": "electron/main.js",
   "scripts": {
     "start": "concurrently \"vite\" \"ping 127.0.0.1 -n 3 >nul && electron .\"",
@@ -64,7 +63,7 @@
     "@nut-tree/nut-js": "^3.1.1",
     "active-win": "^8.2.1",
     "deasync": "^0.1.30",
-    "electron-store": "^10.0.1",
+    "electron-store": "^4.0.0",
     "node-global-key-listener": "^0.3.0",
     "robotjs": "^0.6.0",
     "vue": "^3.5.13"

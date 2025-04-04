@@ -2,7 +2,7 @@ const { app, BrowserWindow, powerMonitor, ipcMain, screen, Tray, Menu } = requir
 const { GlobalKeyboardListener } = require('node-global-key-listener')
 const robot = require('robotjs')
 const path = require("path")
-const Store = require('electron-store').default
+const Store = require('electron-store')
 
 const store = new Store({
   name: 'todo-pomodoro',
@@ -13,7 +13,7 @@ const store = new Store({
       //   totalFocusTime: 0,
       //   focusHistory: [
       //     {
-      //       taskName: "任务1",
+      //       taskName: "任务1", 
       //       startTime: "14:30",
       //       endTime: "15:00",
       //       duration: 30
@@ -30,6 +30,7 @@ let lastActivityTime = Date.now()
 let lastMousePosition = robot.getMousePos()
 let activityCheckInterval
 let isIdle = false
+const NODE_ENV = process.env.NODE_ENV  //新增
 
 // 确保在app准备就绪后再设置监听器
 app.whenReady().then(() => {
@@ -41,19 +42,21 @@ app.whenReady().then(() => {
   // 监听屏幕解锁事件
   powerMonitor.on('unlock-screen', () => {
     console.log('屏幕已解锁')
-    // 在这里处理屏幕解锁后的逻辑
-    updateLastActivity()
 
+    // 恢复活动监控
+    activityCheckInterval = setInterval(checkUserActivity, 10000)
   })
 
   // 监听屏幕锁定事件
   powerMonitor.on('lock-screen', () => {
     console.log('屏幕已锁定')
-    // 在这里处理屏幕锁定后的逻辑
+    
     // 例如：暂停番茄钟计时器
     isIdle = true
     mainWindow?.webContents.send('system-idle', true)
-    lastActivityTime = Date.now() // 防止idle后一直发送消息
+
+    // 停止活动监控
+    cleanupActivityMonitoring()
 
   })
 })
@@ -74,11 +77,12 @@ function createWindow() {
 
   // 加载应用
 
+
   // 开发模式
-  mainWindow.loadURL("http://localhost:3002")
+  // mainWindow.loadURL("http://localhost:3002")
 
   // 生产模式
-  // mainWindow.loadURL(`file://${path.join(__dirname, "../dist/index.html")}`);
+  mainWindow.loadURL(`file://${path.join(__dirname, "../dist/index.html")}`);
   
   // 创建系统托盘
   createTray()

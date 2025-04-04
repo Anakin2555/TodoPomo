@@ -8,10 +8,10 @@ import FocusHistory from './FocusHistory.vue'
 
 
 // 计时器状态和配置
-const FOCUS_TIME = 40 * 60/10; // 40分钟专注
-const SHORT_BREAK_TIME = 30/10; // 30秒短休息
-const LONG_BREAK_TIME = 5 * 60/10; // 5分钟长休息
-const SHORT_BREAK_INTERVAL = 5 * 60/10; // 每15分钟提醒一次短休息
+const FOCUS_TIME = 40 * 60; // 40分钟专注
+const SHORT_BREAK_TIME = 30; // 30秒短休息
+const LONG_BREAK_TIME = 5 * 60; // 5分钟长休息
+const SHORT_BREAK_INTERVAL = 15 * 60; // 每15分钟提醒一次短休息
 
 const timeLeft = ref(FOCUS_TIME)
 const timeLeftMinutes = computed(() => Math.floor((timeLeft.value-1) / 60))
@@ -21,6 +21,7 @@ const timer = ref(null)
 const currentMode = ref('专注')
 const currentTask = ref(null)
 const lastBreakTime = ref(0)
+const hasSaved = ref(false)
 
 // 计时器模式
 const modes = {
@@ -125,7 +126,13 @@ const adjustSegments = (task, increment) => {
 
 // 任务切换时保存专注记录
 watch(currentTask, (newTask, oldTask) => {
-  saveToStorage()
+  console.log('currentTask',newTask,oldTask)
+  if(!hasSaved.value){
+    currentTask.value = oldTask
+    saveToStorage()
+    currentTask.value = newTask
+    hasSaved.value = true
+  }
 })
 
 
@@ -248,6 +255,7 @@ const saveToStorage=async()=>{
     })
   }
 
+
   // 刷新历史记录
   if (historyRef.value) {
     historyRef.value.loadHistory()
@@ -260,9 +268,11 @@ const resetTimer = async () => {
   console.log('resetTimer')
 
   saveToStorage()
-  
+
+  hasSaved.value = false
   // 重置开始时间
   focusStartTime.value = null
+
 
 
   timeLeft.value = modes[currentMode.value]
