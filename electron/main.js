@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu } = require('electron')
+const { app, BrowserWindow, powerMonitor, ipcMain, screen, Tray, Menu } = require('electron')
 const { GlobalKeyboardListener } = require('node-global-key-listener')
 const robot = require('robotjs')
 const path = require("path")
@@ -31,8 +31,32 @@ let lastMousePosition = robot.getMousePos()
 let activityCheckInterval
 let isIdle = false
 
+// 确保在app准备就绪后再设置监听器
+app.whenReady().then(() => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    console.log('createWindow')
+    createWindow()
+  }
 
+  // 监听屏幕解锁事件
+  powerMonitor.on('unlock-screen', () => {
+    console.log('屏幕已解锁')
+    // 在这里处理屏幕解锁后的逻辑
+    updateLastActivity()
 
+  })
+
+  // 监听屏幕锁定事件
+  powerMonitor.on('lock-screen', () => {
+    console.log('屏幕已锁定')
+    // 在这里处理屏幕锁定后的逻辑
+    // 例如：暂停番茄钟计时器
+    isIdle = true
+    mainWindow?.webContents.send('system-idle', true)
+    lastActivityTime = Date.now() // 防止idle后一直发送消息
+
+  })
+})
 
 // 创建主窗口
 function createWindow() {
@@ -70,56 +94,150 @@ function createWindow() {
   setupActivityMonitoring()
 }
 
-
-
-
-
-
-
-
-// 创建提醒窗口的函数
+// 创建提醒窗口的函数 - 支持多屏幕
 function createReminderWindow(text, duration) {
-  // 获取主显示器
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const { width, height } = primaryDisplay.size
+  // 获取所有显示器
+  const displays = screen.getAllDisplays()
+  const reminderWindows = []
 
-  // 创建全屏窗口
-  const reminderWindow = new BrowserWindow({
-    width: width,
-    height: height,
-    x: 0,
-    y: 0,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    }
-  })
-
-  // 加载本地HTML文件
-  reminderWindow.loadFile(path.join(__dirname, 'reminder.html'))
-
-  // 等待页面加载完成后发送数据
-  reminderWindow.webContents.on('did-finish-load', () => {
-    reminderWindow.webContents.send('reminder-data', { 
-      text, 
-      duration,
-      audioPath: path.join(__dirname, 'assets', 'break-end.wav')
+  // 在每个显示器上创建提醒窗口
+  displays.forEach((display) => {
+    const { bounds } = display
+    
+    // 创建窗口，位置和大小与显示器匹配
+    const reminderWindow = new BrowserWindow({
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      frame: false,
+      autoHideMenuBar: true,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,  // 禁止调整窗口大小
+      movable: false,    // 禁止移动窗口
+      fullscreenable: true,
+      kiosk: true,       // 启用kiosk模式，可以帮助禁用某些系统快捷键
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+        devTools: false  // 禁用开发者工具
+      }
     })
+
+    
+    
+    // 加载提醒页面
+    reminderWindow.loadFile(path.join(__dirname, 'reminder.html'))
+
+    // 设置窗口为全屏
     reminderWindow.setFullScreen(true)
+    
+    // 禁用窗口的最大化、最小化和关闭按钮
+    reminderWindow.setMinimizable(false)
+    reminderWindow.setMaximizable(false)
+    
+    // 设置窗口始终保持在最顶层
+    reminderWindow.setAlwaysOnTop(true, 'screen-saver')
+    
+    // 监听窗口获取焦点事件，确保窗口始终保持焦点
+    reminderWindow.on('blur', () => {
+      reminderWindow.focus()
+    })
+    
+    // 在页面加载完成后，注册全局快捷键拦截
+    reminderWindow.webContents.on('did-finish-load', () => {
+      // 发送数据到渲染进程
+      reminderWindow.webContents.send('reminder-data', { 
+        text, 
+        duration,
+        startAudioPath: path.join(__dirname, 'assets', 'break-start.wav'),
+        endAudioPath: path.join(__dirname, 'assets', 'break-end.wav'),
+        displayId: display.id
+      })
+      
+      // 注入JavaScript来捕获和阻止键盘事件
+      reminderWindow.webContents.executeJavaScript(`
+        document.addEventListener('keydown', (e) => {
+          // 阻止所有键盘事件
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }, true);
+        
+        // 禁用右键菜单
+        document.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          return false;
+        }, true);
+      `)
+    })
+    
+    // // 注册全局快捷键拦截器
+    // const { globalShortcut } = require('electron')
+    
+    // // 根据操作系统确定要拦截的快捷键
+    // const isMac = process.platform === 'darwin'
+    
+    // // 尝试拦截常见的系统快捷键
+    // const shortcutsToBlock = [
+    //   'Alt+Tab', 'Alt+F4', 
+    //   'F11', 'Ctrl+Esc', 'Alt+Esc'
+    // ]
+    
+    // // 添加特定于操作系统的快捷键
+    // if (isMac) {
+    //   // macOS 特定快捷键
+    //   shortcutsToBlock.push(
+    //     'Command+Tab', 'Command+Space', 'Command+Q',
+    //     'Command+H', 'Command+M', 'Command+`',
+    //     'Command+W', 'Command+Option+Esc'
+    //   )
+    // } else {
+    //   // Windows 特定快捷键
+    //   shortcutsToBlock.push(
+    //     'CommandOrControl+Tab', 
+    //     'CommandOrControl+Alt+Delete', 'CommandOrControl+Shift+Esc'
+    //   )
+    // }
+    
+    // shortcutsToBlock.forEach(shortcut => {
+    //   try {
+    //     globalShortcut.register(shortcut, () => {
+    //       // 不执行任何操作，只是拦截快捷键
+    //       console.log(`Blocked shortcut: ${shortcut}`)
+    //       return false
+    //     })
+    //   } catch (error) {
+    //     console.log(`Failed to register shortcut: ${shortcut}`, error)
+    //   }
+    // })
+    
+    // // 确保在窗口关闭时取消注册所有快捷键
+    // reminderWindow.on('closed', () => {
+    //   globalShortcut.unregisterAll()
+    // })
+
+    reminderWindows.push(reminderWindow)
   })
 
-  // 指定时间后关闭窗口
+  // 指定时间后关闭所有窗口
   setTimeout(() => {
-    if (!reminderWindow.isDestroyed()) {
-      reminderWindow.close()
-      isIdle = true
-      console.log('休息结束进入idle状态')
-    }
-  }, duration * 1000)
+    reminderWindows.forEach(window => {
+      if (!window.isDestroyed()) {
+        window.close()
+      }
+    })
+    isIdle = true
+    console.log('休息结束进入idle状态')
+  }, duration * 1000+4000)
+
+
+ 
+  
+  // 返回窗口数组，以便在需要时可以从外部控制
+  return reminderWindows
 }
 
 // 检查用户活动
@@ -127,11 +245,6 @@ function checkUserActivity() {
   try {
     // 获取当前鼠标位置
     const currentMousePos = robot.getMousePos()
-    
-    // 检查屏幕是否处于活动状态
-    const displays = screen.getAllDisplays()
-    const isScreenActive = displays.some(display => !display.internal || display.powerState === 'on')
-    
     // 检查鼠标是否移动
     const hasMouseMoved = 
       currentMousePos.x !== lastMousePosition.x || 
@@ -149,8 +262,8 @@ function checkUserActivity() {
       return
     }
     
-    // 如果超过2分钟无活动且之前不是idle状态
-    if (idleTime > 6 * 60 * 1000 || !isScreenActive) {
+    // 如果超过5分钟无活动且之前不是idle状态
+    if (idleTime > 5 * 60 * 1000) {
       isIdle = true
       lastActivityTime = Date.now() // 防止idle后一直发送消息
       console.log('进入idle状态')
@@ -179,7 +292,6 @@ function updateLastActivity() {
 // 设置活动监控
 function setupActivityMonitoring() {
   try {
-
     // // 创建全局键盘监听器
     const keyboard = new GlobalKeyboardListener()
     
@@ -188,7 +300,6 @@ function setupActivityMonitoring() {
       updateLastActivity()
       
     })
-
 
     // 初始化最后鼠标位置
     lastMousePosition = robot.getMousePos()
@@ -209,8 +320,6 @@ function cleanupActivityMonitoring() {
     activityCheckInterval = null
   }
 }
-
-
 
 function createTray() {
   // 创建托盘图标
@@ -258,7 +367,12 @@ ipcMain.on('update-tray', (event, { time, isRunning }) => {
 
 // 监听渲染进程的消息
 ipcMain.on('show-break-reminder', (event, data) => {
+
+  // 休息时，更新最后活动时间，防止休息途中被判定为idle
+  lastActivityTime = Date.now() 
+
   createReminderWindow(data.text, data.duration)
+
   // console.log(event,data)
 })
 
@@ -361,11 +475,6 @@ ipcMain.handle('load-focus-history', () => {
   return todayRecord.focusHistory || []
 })
 
-// 在应用准备就绪时调用函数
-app.whenReady().then(() => {
-  createWindow()
-})
-
 // 证书的链接验证失败时，触发该事件 
 app.on(
   "certificate-error",
@@ -380,11 +489,5 @@ app.on('window-all-closed', () => {
   cleanupActivityMonitoring()
   if (process.platform !== 'darwin') {
     app.quit()
-  }
-})
-
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
   }
 })

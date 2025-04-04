@@ -8,10 +8,10 @@ import FocusHistory from './FocusHistory.vue'
 
 
 // 计时器状态和配置
-const FOCUS_TIME = 40 * 60; // 40分钟专注
-const SHORT_BREAK_TIME = 30; // 30秒短休息
-const LONG_BREAK_TIME = 5 * 60; // 5分钟长休息
-const SHORT_BREAK_INTERVAL = 15 * 60; // 每15分钟提醒一次短休息
+const FOCUS_TIME = 40 * 60/10; // 40分钟专注
+const SHORT_BREAK_TIME = 30/10; // 30秒短休息
+const LONG_BREAK_TIME = 5 * 60/10; // 5分钟长休息
+const SHORT_BREAK_INTERVAL = 5 * 60/10; // 每15分钟提醒一次短休息
 
 const timeLeft = ref(FOCUS_TIME)
 const timeLeftMinutes = computed(() => Math.floor((timeLeft.value-1) / 60))
@@ -76,7 +76,7 @@ const updateTask = async (task) => {
 
 
 // 更新总专注时间
-const updateTotalFocusTime = async (time) => {
+const saveTotalFocusTime = async (time) => {
   console.log('update',time)
   await window.electronAPI.updateTotalFocusTime(time)
 }
@@ -238,13 +238,19 @@ const saveToStorage=async()=>{
   const endTimeStr = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`
   const startTimeStr = `${focusStartTime.value.getHours().toString().padStart(2, '0')}:${focusStartTime.value.getMinutes().toString().padStart(2, '0')}`
   const duration = Math.floor((endTime - focusStartTime.value)/1000/60)
-  if(duration>5){
+  if(duration>9){
+    totalFocusTime.value += duration
     await window.electronAPI.addFocusRecord({
       taskName: currentTask.value?.text || '专注',
       startTime: startTimeStr,
       endTime: endTimeStr,
       duration: duration
     })
+  }
+
+  // 刷新历史记录
+  if (historyRef.value) {
+    historyRef.value.loadHistory()
   }
 }
 
@@ -257,11 +263,6 @@ const resetTimer = async () => {
   
   // 重置开始时间
   focusStartTime.value = null
-  
-  // 刷新历史记录
-  if (historyRef.value) {
-    historyRef.value.loadHistory()
-  }
 
 
   timeLeft.value = modes[currentMode.value]
@@ -395,9 +396,9 @@ watch(timeLeftMinutes, (newVal, oldVal) => {
 
     // 如果分钟数减少，则增加专注时间,排除重置计时器的情况（oldVal<newVal）
     if (oldVal>newVal && currentMode.value === '专注') {
-      // 增加一分钟的专注时间
+      // // 增加一分钟的专注时间,
       totalFocusTime.value++;
-      updateTotalFocusTime(totalFocusTime.value)
+      saveTotalFocusTime(totalFocusTime.value)
 
       // 如果选择了任务，则更新任务的已完成时间
       if(currentTask.value) {

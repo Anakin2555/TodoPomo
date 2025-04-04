@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <title>Reminder</title>
   <style>
     :root {
       --primary-color: #00F2EA;
@@ -107,6 +108,17 @@
         transform: scale(1);
       }
     }
+
+    .error-message {
+      color: red;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .success-message {
+      color: green;
+      margin-top: 10px;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -123,45 +135,103 @@
     <div class="progress-bar">
       <div class="progress-fill" id="progressFill"></div>
     </div>
+
+    <div id="audio-status" class="error-message"></div>
+
   </div>
+
 
   <script>
     const { ipcRenderer } = require('electron');
     
-    ipcRenderer.on('reminder-data', (event, data) => {
-      document.getElementById('reminderText').textContent = data.text;
-      const totalDuration = data.duration;
-      let timeLeft = totalDuration;
-      
-      const updateProgress = (timeLeft) => {
-        const progress = (timeLeft / totalDuration) * 100;
-        document.getElementById('progressFill').style.width = `${progress}%`;
-      }
-      
-      const timer = setInterval(() => {
-        timeLeft--;
+    ipcRenderer.on('reminder-data', async (event, data) => {
+      try {
+        const startAudio = new Audio(data.startAudioPath);
+        const endAudio = new Audio(data.endAudioPath);
+
+        
+        // 添加音频事件监听器
+        startAudio.addEventListener('error', (e) => {
+          document.getElementById('audio-status').className = 'error-message';
+          document.getElementById('audio-status').textContent = `音频错误: ${e.target.error.message || '未知错误'}`;
+        });
+
+        endAudio.addEventListener('error', (e) => {
+          document.getElementById('audio-status').className = 'error-message';
+          document.getElementById('audio-status').textContent = `音频错误: ${e.target.error.message || '未知错误'}`;
+        });
+
+        
+
+        // 显示提醒内容
+        document.getElementById('reminderText').textContent = data.text;
+
+        await startAudio.play();
+
+        const totalDuration = data.duration;
+        let timeLeft = totalDuration;
+        
+        const updateProgress = (timeLeft) => {
+          const progress = (timeLeft / totalDuration) * 100;
+          document.getElementById('progressFill').style.width = `${progress}%`;
+        }
+        
+        const timer = setInterval(() => {
+          timeLeft--;
+          const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+          const seconds = (timeLeft % 60).toString().padStart(2, '0');
+          document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+          updateProgress(timeLeft);
+          
+          if (timeLeft <= 0) {
+            clearInterval(timer);
+            endAudio.play().then(() => {
+              setTimeout(() => window.close(), 3000);
+            });
+          }
+        }, 1000);
+
+        // 初始化显示
         const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
         const seconds = (timeLeft % 60).toString().padStart(2, '0');
         document.getElementById('timer').textContent = `${minutes}:${seconds}`;
         updateProgress(timeLeft);
-        
-        if (timeLeft <= 0) {
-          clearInterval(timer);
-          const audio = new Audio(data.audioPath);
-          audio.play().catch(err => console.error('Failed to play audio:', err));
-          
-          // 添加淡出动画
-          document.body.style.opacity = '0';
-          setTimeout(() => window.close(), 500);
-        }
-      }, 1000);
 
-      // 初始化显示
-      const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
-      const seconds = (timeLeft % 60).toString().padStart(2, '0');
-      document.getElementById('timer').textContent = `${minutes}:${seconds}`;
-      updateProgress(timeLeft);
+      } catch (error) {
+        document.getElementById('audio-status').className = 'error-message';
+        document.getElementById('audio-status').textContent = `播放错误: ${error.message || '未知错误'} (${new Date().toLocaleTimeString()})`;
+        
+        // 尝试播放备用音频或其他处理
+        handleAudioError(error);
+      }
     });
+
+    function handleAudioError(error) {
+      let errorMessage = '音频播放失败: ';
+      
+      switch(error.name) {
+        case 'NotAllowedError':
+          errorMessage += '需要用户授权播放音频';
+          break;
+        case 'NotFoundError':
+          errorMessage += '音频文件未找到';
+          break;
+        case 'NotSupportedError':
+          errorMessage += '音频格式不支持';
+          break;
+        default:
+          errorMessage += error.message || '未知错误';
+      }
+      
+      document.getElementById('audio-status').className = 'error-message';
+      document.getElementById('audio-status').textContent = `${errorMessage} (${new Date().toLocaleTimeString()})`;
+
+      // // 通知主进程发生错误
+      // ipcRenderer.send('audio-error', {
+      //   error: errorMessage,
+      //   timestamp: new Date().toISOString()
+      // });
+    }
   </script>
 </body>
 </html> 
