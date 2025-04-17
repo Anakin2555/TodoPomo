@@ -1,8 +1,9 @@
-const { app, BrowserWindow, powerMonitor, ipcMain, screen, Tray, Menu } = require('electron')
+const { app, BrowserWindow, powerMonitor, ipcMain, screen, Tray, Menu, Notification } = require('electron')
 const { GlobalKeyboardListener } = require('node-global-key-listener')
 const robot = require('robotjs')
 const path = require("path")
 const Store = require('electron-store')
+const { createMenu } = require(path.join(__dirname, 'menu.js'))
 
 const store = new Store({
   name: 'todo-pomodoro',
@@ -24,13 +25,37 @@ const store = new Store({
   }
 })
 
+
+console.log(store.store)
 let mainWindow
 let tray = null
 let lastActivityTime = Date.now()
 let lastMousePosition = robot.getMousePos()
 let activityCheckInterval
 let isIdle = false
-const NODE_ENV = process.env.NODE_ENV  //新增
+let reminderWindows = []
+let reminderTimer=null
+
+// 获取应用锁
+const gotTheLock = app.requestSingleInstanceLock()
+
+// 如果获取锁失败，说明已经有一个实例在运行
+if (!gotTheLock) {
+  app.quit()
+  return
+}
+
+// 监听第二个实例的启动
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  // 如果存在主窗口，则显示并聚焦它
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+    mainWindow.show()
+    mainWindow.focus()
+  }
+})
 
 // 确保在app准备就绪后再设置监听器
 app.whenReady().then(() => {
@@ -41,24 +66,91 @@ app.whenReady().then(() => {
 
   // 监听屏幕解锁事件
   powerMonitor.on('unlock-screen', () => {
-    console.log('屏幕已解锁')
+    console.log('屏幕亮屏')
 
     // 恢复活动监控
-    activityCheckInterval = setInterval(checkUserActivity, 10000)
+    setupActivityMonitoring()
+
+    setTimeout(() => {
+      // 暂停番茄钟计时器
+      isIdle = true
+      mainWindow?.webContents.send('system-idle', true)
+      console.log('系统唤醒重置计时器')
+    }, 2000)
   })
 
   // 监听屏幕锁定事件
   powerMonitor.on('lock-screen', () => {
-    console.log('屏幕已锁定')
+    console.log('屏幕息屏')
+
+    // 关闭提醒窗口，息屏时不能关闭，否则有漏洞跳过休息
+    // if (reminderTimer) {
+    //   clearTimeout(reminderTimer)
+    //   reminderTimer = null
+    // }
+
+    // if (reminderWindows.length > 0) {
+    //   reminderWindows.forEach(window => {
+    //     if (!window.isDestroyed()) {
+    //       window.close()
+    //     }
+    //   })
+    // }
     
     // 例如：暂停番茄钟计时器
     isIdle = true
     mainWindow?.webContents.send('system-idle', true)
+    console.log('息屏发送idle信号')
 
     // 停止活动监控
     cleanupActivityMonitoring()
 
   })
+
+  // // 监听系统唤醒事件
+  // powerMonitor.on('resume', () => {
+  //   console.log('系统唤醒')
+    
+  //   // 恢复活动监控
+  //   setupActivityMonitoring()
+
+  //   setTimeout(() => {
+  //     // 暂停番茄钟计时器
+  //     isIdle = true
+  //     mainWindow?.webContents.send('system-idle', true)
+  //     console.log('系统唤醒重置计时器')
+  //   }, 3000)
+  // })
+
+  // // 监听系统睡眠事件
+  // powerMonitor.on('suspend', () => {
+  //   console.log('系统睡眠')
+    
+  //   // 关闭提醒窗口
+  //   if (reminderTimer) {
+  //     clearTimeout(reminderTimer)
+  //     reminderTimer = null
+  //   }
+
+  //   if (reminderWindows.length > 0) {
+  //     reminderWindows.forEach(window => {
+  //       if (!window.isDestroyed()) {
+  //         window.close()
+  //       }
+  //     })
+  //   }
+    
+    
+
+  //   // 停止活动监控
+  //   cleanupActivityMonitoring()
+  // })
+
+  
+
+  
+  
+  createTray()
 })
 
 // 创建主窗口
@@ -75,23 +167,37 @@ function createWindow() {
     }
   })
 
-  // 加载应用
-
-
-  // 开发模式
-  // mainWindow.loadURL("http://localhost:3002")
-
-  // 生产模式
-  mainWindow.loadURL(`file://${path.join(__dirname, "../dist/index.html")}`);
-  
-  // 创建系统托盘
-  createTray()
+  // 根据环境动态设置加载URL
+  if (process.env.NODE_ENV === 'development') {
+    // 开发模式
+    mainWindow.loadURL("http://localhost:3002")
+    // 可选：自动打开开发者工具
+    // mainWindow.webContents.openDevTools()
+  } else {
+    // 生产模式
+    mainWindow.loadURL(`file://${path.join(__dirname, "../dist/index.html")}`)
+  }
   
   // 处理窗口关闭事件
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault()
       mainWindow.hide()
+    }
+  })
+
+
+  // 创建菜单并传入参数
+  createMenu(mainWindow, {
+    getAutoLaunchStatus: () => {
+      return app.getLoginItemSettings().openAtLogin
+    },
+    setAutoLaunch: (enable) => {
+      app.setLoginItemSettings({
+        openAtLogin: enable,
+        path: process.execPath
+      })
+      return app.getLoginItemSettings().openAtLogin
     }
   })
 
@@ -102,7 +208,7 @@ function createWindow() {
 function createReminderWindow(text, duration) {
   // 获取所有显示器
   const displays = screen.getAllDisplays()
-  const reminderWindows = []
+  reminderWindows = []
 
   // 在每个显示器上创建提醒窗口
   displays.forEach((display) => {
@@ -227,7 +333,7 @@ function createReminderWindow(text, duration) {
   })
 
   // 指定时间后关闭所有窗口
-  setTimeout(() => {
+  reminderTimer = setTimeout(() => {
     reminderWindows.forEach(window => {
       if (!window.isDestroyed()) {
         window.close()
@@ -235,13 +341,11 @@ function createReminderWindow(text, duration) {
     })
     isIdle = true
     console.log('休息结束进入idle状态')
+    setupActivityMonitoring()
   }, duration * 1000+4000)
 
-
- 
-  
   // 返回窗口数组，以便在需要时可以从外部控制
-  return reminderWindows
+  
 }
 
 // 检查用户活动
@@ -259,18 +363,31 @@ function checkUserActivity() {
     
     const currentTime = Date.now()
     const idleTime = currentTime - lastActivityTime
+    // console.log('idleTime',idleTime)
     
     // 如果检测到活动，更新时间
     if (hasMouseMoved) {
       updateLastActivity()
       return
     }
+
+    // 如果超过4.5分钟无活动并且之前不是idle状态则提醒即将进入idle
+    if(idleTime >= 4.5 * 60 * 1000 && idleTime < 5 * 60 * 1000){
+      if(!isIdle){
+        // 发送系统通知提醒用户
+        new Notification({
+          title: '即将进入空闲状态！',
+          body: '检测到很久没有活动，即将暂停计时器',
+          silent: false
+        }).show()
+      }
+    }
     
     // 如果超过5分钟无活动且之前不是idle状态
     if (idleTime > 5 * 60 * 1000) {
       isIdle = true
       lastActivityTime = Date.now() // 防止idle后一直发送消息
-      console.log('进入idle状态')
+      console.log('5分钟无活动进入idle状态')
       // 通知渲染进程
       mainWindow?.webContents.send('system-idle', true)
     }
@@ -288,7 +405,7 @@ function updateLastActivity() {
   
   // 如果状态从idle变为active，通知渲染进程
   if (previousState) {
-    console.log('从idle状态恢复')
+    console.log('检测到活动，从idle状态恢复')
     mainWindow?.webContents.send('system-idle', false)
   }
 }
@@ -310,7 +427,9 @@ function setupActivityMonitoring() {
     lastActivityTime = Date.now()
     
     // 设置检查间隔（每十秒检查一次）
+    cleanupActivityMonitoring()
     activityCheckInterval = setInterval(checkUserActivity, 10000)
+    console.log('setup activity monitoring')
     
   } catch (error) {
     console.error('Failed to setup activity monitoring:', error)
@@ -319,6 +438,7 @@ function setupActivityMonitoring() {
 
 // 清理监控
 function cleanupActivityMonitoring() {
+  console.log('cleanupActivityMonitoring')
   if (activityCheckInterval) {
     clearInterval(activityCheckInterval)
     activityCheckInterval = null
@@ -326,36 +446,45 @@ function cleanupActivityMonitoring() {
 }
 
 function createTray() {
-  // 创建托盘图标
-  tray = new Tray(path.join(__dirname, 'assets/icon.png'))
-  
-  // 托盘菜单
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示',
-      click: () => {
-        mainWindow.show()
+  // 确保只创建一次托盘图标
+  if (!tray) {
+    tray = new Tray(path.join(__dirname, 'assets/icon.png'))
+    
+    // 托盘菜单
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: '显示',
+        click: () => {
+          mainWindow.show()
+        }
+      },
+      {
+        label: '退出',
+        click: () => {
+          app.isQuitting = true
+          app.quit()
+        }
+      },
+      {
+        label:'暂停',
+        click:()=>{
+          
+        }
       }
-    },
-    {
-      label: '退出',
-      click: () => {
-        app.isQuitting = true
-        app.quit()
-      }
-    }
-  ])
-  
-  // 设置托盘提示文字
-  tray.setToolTip('番茄工作法')
-  
-  // 设置托盘菜单
-  tray.setContextMenu(contextMenu)
-  
-  // 点击托盘图标显示窗口
-  tray.on('click', () => {
-    mainWindow.show()
-  })
+
+    ])
+    
+    // 设置托盘提示文字
+    tray.setToolTip('TodoPomo')
+    
+    // 设置托盘菜单
+    tray.setContextMenu(contextMenu)
+    
+    // 点击托盘图标显示窗口
+    tray.on('click', () => {
+      mainWindow.show()
+    })
+  }
 }
 
 // 保持应用活跃
@@ -363,9 +492,9 @@ app.commandLine.appendSwitch('disable-background-timer-throttling')
 app.commandLine.appendSwitch('disable-background-networking')
 
 // 监听计时器状态
-ipcMain.on('update-tray', (event, { time, isRunning }) => {
+ipcMain.on('update-tray', (event, { time, taskName, shortBreakTime }) => {
   if (tray) {
-    tray.setToolTip(`番茄工作法 ${isRunning ? '- ' + time : ''}`)
+    tray.setToolTip(`${taskName}中：\n\n${shortBreakTime}分钟后小憩 \n${time}分钟后休息`)
   }
 })
 
@@ -373,10 +502,12 @@ ipcMain.on('update-tray', (event, { time, isRunning }) => {
 ipcMain.on('show-break-reminder', (event, data) => {
 
   // 休息时，更新最后活动时间，防止休息途中被判定为idle
+  cleanupActivityMonitoring()
+
   lastActivityTime = Date.now() 
-
+  console.log('show-break-reminder',data)
   createReminderWindow(data.text, data.duration)
-
+  
   // console.log(event,data)
 })
 
@@ -389,19 +520,29 @@ function getTodayString() {
   return `${year}-${month}-${day}`
 }
 
-// 获取或创建当天的记录
-function getTodayRecord() {
-  const today = getTodayString()
-  console.log(today)
+function getYesterdayString() {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1); // 设置为昨天
+  const year = yesterday.getFullYear();
+  const month = String(yesterday.getMonth() + 1).padStart(2, '0'); // 月份从0开始
+  const day = String(yesterday.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`; // 返回格式为 YYYY-MM-DD
+}
+
+
+// 获取或创建某天的记录
+function getSomeDayRecord(date) {
+  console.log('getSomeDayRecord',date)
   const dailyRecords = store.get('dailyRecords', {})
-  if (!dailyRecords[today]) {
-    dailyRecords[today] = {
+  if (!dailyRecords[date]) {
+    dailyRecords[date] = {
       tasks: [],
       totalFocusTime: 0
     }
     store.set('dailyRecords', dailyRecords)
   }
-  return dailyRecords[today]
+  return dailyRecords[date]
 }
 
 // 处理任务相关的IPC
@@ -440,44 +581,94 @@ ipcMain.handle('delete-task', (event, taskId) => {
 })
 
 ipcMain.handle('load-tasks', () => {
-  const todayRecord = getTodayRecord()
-  return todayRecord.tasks
-})
-
-ipcMain.handle('update-total-focus-time', (event, time) => {
   const today = getTodayString()
-  const dailyRecords = store.get('dailyRecords', {})
-  if (!dailyRecords[today]) {
-    dailyRecords[today] = { tasks: [], totalFocusTime: 0 }
-  }
-  dailyRecords[today].totalFocusTime = time
-  store.set('dailyRecords', dailyRecords)
-  return time
+  const record = getSomeDayRecord(today)
+  console.log('load-tasks',record)
+  return record.tasks
 })
 
-ipcMain.handle('load-total-focus-time', () => {
-  const todayRecord = getTodayRecord()
-  return todayRecord.totalFocusTime
+// ipcMain.handle('update-total-focus-time', (event, startTime,time) => {
+//   const today = getTodayString();
+//   const now = new Date();
+//   const startDate = new Date(startTime); // 👈 时间戳转 Date
+//   const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+//   const nowDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+//   console.log(startTime,startDateOnly,nowDateOnly)
+//   // 检查开始时间是否为前一天
+//   if (startDateOnly.getTime() < nowDateOnly.getTime()) {
+//     const yesterday = getYesterdayString();
+//     const dailyRecords = store.get('dailyRecords', {});
+    
+//     // 确保昨天的记录存在
+//     if (!dailyRecords[yesterday]) {
+//       dailyRecords[yesterday] = { tasks: [], totalFocusTime: 0 };
+//     }
+//     dailyRecords[yesterday].totalFocusTime += time; // 增加到昨天的记录
+//     store.set('dailyRecords', dailyRecords);
+//   } else {
+//     const dailyRecords = store.get('dailyRecords', {});
+//     if (!dailyRecords[today]) {
+//       dailyRecords[today] = { tasks: [], totalFocusTime: 0 };
+//     }
+//     dailyRecords[today].totalFocusTime += time; // 增加到今天的记录
+//     store.set('dailyRecords', dailyRecords);
+//   }
+//   return time;
+// })
+
+ipcMain.handle('load-total-focus-time', (event, date) => {
+  const record = getSomeDayRecord(date)
+  // console.log(todayRecord)
+  return record.totalFocusTime
 })
 
 // 添加历史记录相关的IPC处理
 ipcMain.handle('add-focus-record', (event, record) => {
   const today = getTodayString()
+  const yesterday = getYesterdayString()
   const dailyRecords = store.get('dailyRecords', {})
-  if (!dailyRecords[today]) {
-    dailyRecords[today] = { tasks: [], totalFocusTime: 0, focusHistory: [] }
+
+  // 判断是否跨天（结束时间小于开始时间）
+  const isOvernight = record.endTime < record.startTime
+
+  // 确定记录应该保存到哪一天
+  const targetDate = isOvernight ? yesterday : today
+
+  // 确保目标日期的记录存在
+  if (!dailyRecords[targetDate]) {
+    dailyRecords[targetDate] = { 
+      tasks: [], 
+      totalFocusTime: 0, 
+      focusHistory: [] 
+    }
   }
-  dailyRecords[today].focusHistory = dailyRecords[today].focusHistory || []
-  dailyRecords[today].focusHistory.push(record)
+  
+  dailyRecords[targetDate].focusHistory = dailyRecords[targetDate].focusHistory || []
+  dailyRecords[targetDate].focusHistory.push(record)
+  dailyRecords[targetDate].totalFocusTime += record.duration
+  
   store.set('dailyRecords', dailyRecords)
   return record
 })
 
 // 获取历史记录
-ipcMain.handle('load-focus-history', () => {
-  const todayRecord = getTodayRecord()
-  return todayRecord.focusHistory || []
+ipcMain.handle('load-focus-history', (event, date) => {
+
+  const record = getSomeDayRecord(date)
+  return record.focusHistory || []
 })
+
+// 添加 IPC 处理程序
+ipcMain.on('show-notification', (event, options) => {
+  console.log('show-notification',options)
+  new Notification({
+    title: options.title || '提醒',  // 添加默认标题
+    body: options.body || '',        // 添加默认内容
+    silent: false
+  }).show()
+})
+
 
 // 证书的链接验证失败时，触发该事件 
 app.on(
@@ -495,3 +686,20 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+// 处理应用激活事件
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow()
+  }
+})
+
+// 确保在应用退出时清理托盘图标
+app.on('before-quit', () => {
+  if (tray) {
+    tray.destroy()
+    tray = null
+  }
+})
+
+

@@ -22,10 +22,17 @@ import { ref, onMounted } from 'vue'
 
 const focusHistory = ref([])
 
-// 加载历史记录
+// 格式化日期
+const formatDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+// 从子组件加载历史记录
 const loadHistory = async () => {
   try {
-    focusHistory.value = await window.electronAPI.loadFocusHistory()
+    focusHistory.value = await window.electronAPI.loadFocusHistory(formatDate(new Date()))
   } catch (error) {
     console.error('Failed to load focus history:', error)
   }
