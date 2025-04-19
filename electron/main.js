@@ -35,6 +35,7 @@ let activityCheckInterval
 let isIdle = false
 let reminderWindows = []
 let reminderTimer=null
+let isTimerRunning = true
 
 // 获取应用锁
 const gotTheLock = app.requestSingleInstanceLock()
@@ -446,45 +447,8 @@ function cleanupActivityMonitoring() {
 }
 
 function createTray() {
-  // 确保只创建一次托盘图标
-  if (!tray) {
-    tray = new Tray(path.join(__dirname, 'assets/icon.png'))
-    
-    // 托盘菜单
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: '显示',
-        click: () => {
-          mainWindow.show()
-        }
-      },
-      {
-        label: '退出',
-        click: () => {
-          app.isQuitting = true
-          app.quit()
-        }
-      },
-      {
-        label:'暂停',
-        click:()=>{
-          
-        }
-      }
-
-    ])
-    
-    // 设置托盘提示文字
-    tray.setToolTip('TodoPomo')
-    
-    // 设置托盘菜单
-    tray.setContextMenu(contextMenu)
-    
-    // 点击托盘图标显示窗口
-    tray.on('click', () => {
-      mainWindow.show()
-    })
-  }
+  tray = new Tray(path.join(__dirname, 'assets/icon.png'))
+  updateTrayMenu()
 }
 
 // 保持应用活跃
@@ -654,9 +618,30 @@ ipcMain.handle('add-focus-record', (event, record) => {
 
 // 获取历史记录
 ipcMain.handle('load-focus-history', (event, date) => {
-
   const record = getSomeDayRecord(date)
   return record.focusHistory || []
+})
+
+// 获取当月有记录的日期
+ipcMain.handle('load-month-records', (event, year, month) => {
+  // 获取所有日期记录
+  const dailyRecords = store.get('dailyRecords', {})
+  
+  // 过滤出指定年月的日期，且总专注时长不为0
+  const datesWithRecords = Object.keys(dailyRecords).filter(dateStr => {
+    // 日期格式为 YYYY-MM-DD
+    const parts = dateStr.split('-')
+    const recordYear = parseInt(parts[0])
+    const recordMonth = parseInt(parts[1])
+    
+    // 增加判断条件：总专注时长必须大于0才算有记录
+    return recordYear === year && 
+           recordMonth === month && 
+           dailyRecords[dateStr].totalFocusTime > 0
+  })
+  
+  // 返回有记录的日期
+  return datesWithRecords
 })
 
 // 添加 IPC 处理程序
@@ -669,6 +654,17 @@ ipcMain.on('show-notification', (event, options) => {
   }).show()
 })
 
+// 监听渲染进程发来的状态更新
+ipcMain.on('update-timer-status', (_, running) => {
+  isTimerRunning = running
+  console.log(isTimerRunning)
+  if(!isTimerRunning){
+    tray.setToolTip(`已暂停`)
+  }else{
+    tray.setToolTip(`运行中`)
+  }
+  updateTrayMenu()
+})
 
 // 证书的链接验证失败时，触发该事件 
 app.on(
@@ -701,5 +697,33 @@ app.on('before-quit', () => {
     tray = null
   }
 })
+
+// 更新托盘菜单项
+function updateTrayMenu() {
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: isTimerRunning ? '暂停' : '开始',
+      click: () => {
+        isTimerRunning = !isTimerRunning
+        mainWindow.webContents.send('toggle-timer')
+        updateTrayMenu()
+      }
+    },
+    { type: 'separator' }, // 添加分隔线
+    {
+      label: '主界面',
+      click: () => {
+        mainWindow.show()
+      }
+    },
+    {
+      label: '退出',
+      click: () => {
+        app.quit()
+      }
+    }
+  ])
+  tray.setContextMenu(contextMenu)
+}
 
 

@@ -54,8 +54,8 @@ body {
 }
 
 /* 防止滚动条导致页面抖动 */
-html {
+/* html {
   overflow-y: overlay;
   scrollbar-gutter: stable;
-}
+} */
 </style>

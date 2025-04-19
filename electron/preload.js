@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateTray: (data) => ipcRenderer.send('update-tray', data),
   addFocusRecord: (record) => ipcRenderer.invoke('add-focus-record', record),
   loadFocusHistory: (date) => ipcRenderer.invoke('load-focus-history',date),
+  loadMonthRecords: (year, month) => ipcRenderer.invoke('load-month-records', year, month),
   onSystemIdle: (callback) => {
     ipcRenderer.on('system-idle', callback)
   },
@@ -31,5 +32,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDailyFocusTargetChanged: (callback)=>
     ipcRenderer.on('daily-focus-target-changed',(_,value)=>callback(value)),
 
-  showNotification: (options) => ipcRenderer.send('show-notification', options)
+  showNotification: (options) => ipcRenderer.send('show-notification', options),
+
+  updateTimerStatus: (status) => {
+    ipcRenderer.send('update-timer-status', status)
+  },
+  onToggleTimer: (callback) => {
+    ipcRenderer.on('toggle-timer', () => callback())
+  },
+  removeToggleTimer: () => {
+    ipcRenderer.removeAllListeners('toggle-timer')
+  }
 }) 

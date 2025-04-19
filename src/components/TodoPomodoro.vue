@@ -7,60 +7,73 @@ import IconEnd from './icons/IconEnd.vue'
 import FocusHistory from './FocusHistory.vue'
 import FocusHistoryModal from './FocusHistoryModal.vue'
 
+// ======================================================================
+// 配置和常量
+// ======================================================================
+const FOCUS_TIME = ref(40 * 60)          // 40分钟专注
+const SHORT_BREAK_TIME = ref(30)         // 30秒短休息
+const LONG_BREAK_TIME = ref(5 * 60)      // 5分钟长休息
+const SHORT_BREAK_INTERVAL = ref(15 * 60) // 每15分钟提醒一次短休息
+const DAILY_FOCUS_TARGET = ref(8 * 60)   // 每日目标专注时间（8小时）
 
-// 计时器状态和配置
-const FOCUS_TIME = ref(40 * 60); // 40分钟专注
-const SHORT_BREAK_TIME = ref(30); // 30秒短休息
-const LONG_BREAK_TIME = ref(5 * 60); // 5分钟长休息
-const SHORT_BREAK_INTERVAL = ref(15 * 60); // 每15分钟提醒一次短休息
-// 设置目标工作时间（8小时 = 480分钟）
-const DAILY_FOCUS_TARGET = ref(8 * 60);
-
-
+// ======================================================================
+// 状态管理
+// ======================================================================
+// 计时器状态
 const timeLeft = ref(FOCUS_TIME.value)
-const timeLeftMinutes = computed(() => Math.floor((timeLeft.value-1) / 60))
 const isStart = ref(false)
-const isPause = ref(false) // 主动暂停
+const isPause = ref(false)
 const isRunning = ref(false)
 const timer = ref(null)
-const currentTask = ref(null)
 const lastBreakTime = ref(0)
 const hasSaved = ref(false)
-const tasks = ref([])
-
-// 总专注时间（以分钟为单位）
-const totalFocusTime = ref(0);
-
-// 添加历史记录组件引用
-const historyRef = ref(null)
-
-// 添加开始时间变量
 const focusStartTime = ref(null)
+const canWatch = ref(false) // 是否开始监听时间变化
 
-// 添加一个标志变量来控制是否开始监听
-const canWatch = ref(false)
+// 任务相关状态
+const tasks = ref([])
+const currentTask = ref(null)
+const showTaskList = ref(false)
+const totalFocusTime = ref(0)
 
-// 添加控制弹窗显示的状态
+// 新任务表单状态
+const newTask = ref({
+  id: Date.now(),
+  text: '',
+  completed: false,
+  totalSegments: 2,
+  completedTime: 0,
+  get totalTime() {
+    return this.totalSegments * (FOCUS_TIME.value / 60)
+  }
+})
+
+// UI相关状态
 const showHistoryModal = ref(false)
-
-// 添加提示消息状态
 const showMessage = ref(false)
 const messageText = ref('')
-const messageType = ref('error') // 'error' 或 'success'
+const messageType = ref('error')
+const historyRef = ref(null)
 
-// 新建Todo 项
-const newTask = ref({
-      id: Date.now(),
-      text: '',
-      completed: false,
-      totalSegments: 2,  // 默认2个时间段
-      completedTime: 0,  // 已完成的时间（分钟）
-      totalTime: 0,
-      get totalTime(){
-        return this.totalSegments * (FOCUS_TIME.value/60)
-      }
-    })
+// ======================================================================
+// 计算属性
+// ======================================================================
+// 计时器分钟数
+const timeLeftMinutes = computed(() => Math.floor((timeLeft.value - 1) / 60))
 
+// 环形进度条计算
+const radius = 145
+const circumference = computed(() => 2 * Math.PI * radius)
+
+// 计算进度偏移量
+const progressOffset = computed(() => {
+  const progress = timeLeft.value / FOCUS_TIME.value
+  return circumference.value * (1 - progress)
+})
+
+// ======================================================================
+// 任务管理功能
+// ======================================================================
 // 添加任务
 const addTask = async () => {
   if (newTask.value.text.trim()) {
@@ -91,12 +104,10 @@ const addTask = async () => {
 
 // 更新任务
 const updateTask = async (task) => {
+  if (!task) return
   console.log({...task})
   await window.electronAPI.updateTask({...task})
 }
-
-
-
 
 // 删除任务
 const deleteTask = async (task) => {
@@ -104,43 +115,16 @@ const deleteTask = async (task) => {
   tasks.value = tasks.value.filter(t => t.id !== task.id)
 }
 
-// // 监听任务变化并更新
-// watch(tasks, (newTasks, oldTasks) => {
-//   // 找出发生变化的任务
-//   newTasks.forEach(task => {
-//     const oldTask = oldTasks.find(t => t.id === task.id)
-//     if (!oldTask || JSON.stringify(task) !== JSON.stringify(oldTask)) {
-//       updateTask(task)
-//     }
-//   })
-// }, { deep: true })
-
-
-
-// 添加修改时间段的函数
+// 调整任务时间段
 const adjustSegments = (task, increment) => {
   if (increment) {
     task.totalSegments++
-    task.totalTime = task.totalSegments * FOCUS_TIME.value
+    task.totalTime = task.totalSegments * (FOCUS_TIME.value / 60)
   } else if (task.totalSegments > 1) {
     task.totalSegments--
-    task.totalTime = task.totalSegments * FOCUS_TIME.value
+    task.totalTime = task.totalSegments * (FOCUS_TIME.value / 60)
   }
 }
-
-
-// 任务切换时保存专注记录
-watch(currentTask, async (newTask, oldTask) => {
-  console.log('currentTask',newTask,oldTask)
-  if(!hasSaved.value){
-    hasSaved.value = true
-    updateTask(currentTask.value) // 存储任务时间
-    await saveToStorage(false,oldTask?.text || '专注')  // 添加任务时间段
-    focusStartTime.value = new Date()
-  }
-})
-
-
 
 // 从弹窗中选择并设置任务
 const setTask = (task) => {
@@ -150,136 +134,45 @@ const setTask = (task) => {
 
 // 弹窗外点击关闭选择任务列表
 const closeTaskList = (event) => {
-  // 检查点击事件的目标是否在task-list内
-  const taskList = document.querySelector('.task-list');
-  const taskLabel = document.querySelector('.timer-label');
+  const taskList = document.querySelector('.task-list')
+  const taskLabel = document.querySelector('.timer-label')
   
   if (showTaskList.value && 
       !taskList?.contains(event.target) && 
       !taskLabel?.contains(event.target)) {
-    showTaskList.value = false;
+    showTaskList.value = false
   }
 }
 
-
-// 监测主线程的idle信号
-const handleSystemIdle = (event, isIdle) => {
-  console.log('handleSystemIdle',isIdle)
-  // 监测到idle
-  if (isIdle) {
-    // 重置计时器
-    resetTimer(isIdle)
-    console.log('监测到idle')
-
-    // 监测到active
-  }else if(!isIdle&&!isRunning.value&&!isPause.value){
-    // 重新开始计时器
-    startTimer()
-    console.log('监测到active')
-  }
-}
-// 格式化日期
-const formatDate = (date) => {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-// 挂载时添加事件监听
-onMounted(async () => {
-  console.log('挂载')
-  // 加载保存的任务
-  try {
-    const savedTasks = await window.electronAPI.loadTasks()
-    totalFocusTime.value = await window.electronAPI.loadTotalFocusTime(formatDate(new Date()))
-    if (savedTasks && savedTasks.length > 0) {
-      tasks.value = savedTasks
-    }
-  } catch (error) {
-    console.error('Failed to load tasks:', error)
-  }
-
-  document.addEventListener('click', closeTaskList);
-  window.electronAPI.onSystemIdle(handleSystemIdle)
-  
-  window.electronAPI.onFocusDurationChanged((value) => {
-    FOCUS_TIME.value = value*60
-    resetTimer()
-
-    startTimer()
-  })
-  
-  window.electronAPI.onShortBreakDurationChanged((value) => {
-    SHORT_BREAK_TIME.value = value
-  })
-
-  window.electronAPI.onShortBreakIntervalChanged((value) => {
-    SHORT_BREAK_INTERVAL.value = value*60
-  })
-
-  window.electronAPI.onBreakDurationChanged((value) => {
-    LONG_BREAK_TIME.value = value*60
-  })
-
-  window.electronAPI.onDailyFocusTargetChanged((value)=>{
-    DAILY_FOCUS_TARGET.value=value*60
-  })
-
-  setTimeout(()=>{
-    startTimer()
-  },1000)
-
-  // 在组件挂载后延迟2秒设置标志变量
-  setTimeout(() => {
-    canWatch.value = true;
-    console.log('开始监听时间变化');
-  }, 2000);
-})
-
-
-// 组件卸载时移除事件监听
-onUnmounted(() => {
-  console.log('卸载')
-  document.removeEventListener('click', closeTaskList);
-  window.electronAPI.removeSystemIdleListener(handleSystemIdle)
-  resetTimer()
-})
-
-// 选择任务
-const showTaskList = ref(false)
+// 弹出任务选择列表
 const chooseTask = () => {
   showTaskList.value = !showTaskList.value
 }
 
-// // 开始专注
-// const startFocus = (task) => {
-//   currentTask.value = task
-//   timeLeft.value = FOCUS_TIME.value
-//   lastBreakTime.value = 0
-//   startTimer()
-// }
-
-// 开始休息
-// const startBreak = (isLongBreak = false) => {
-//   currentMode.value = isLongBreak ? '长休息' : '短休息'
-//   timeLeft.value = isLongBreak ? LONG_BREAK_TIME : SHORT_BREAK_TIME
-//   startTimer()
-// }
-
-// 计时器控制
-const ControlTimer = () => {
-  
-  if (isRunning.value&&!isPause.value) {
-    pauseTimer()
-    isPause.value=true
+// 开始新任务
+const startNewTask = (task) => {
+  if (currentTask.value?.id === task.id) {
+    currentTask.value = null
   } else {
-    startTimer()
-    
+    currentTask.value = task
   }
 }
 
-
+// ======================================================================
 // 计时器功能
+// ======================================================================
+// 控制计时器
+const ControlTimer = () => {
+  if (isRunning.value && !isPause.value) {
+    isPause.value = true
+    pauseTimer()
+  } else {
+    startTimer()
+  }
+  
+}
+
+// 开始计时器
 const startTimer = () => {
   if (!isRunning.value) {
     // 记录开始时间
@@ -289,24 +182,22 @@ const startTimer = () => {
     
     isRunning.value = true
     isStart.value = true
-    isPause.value=false
+    isPause.value = false
+    window.electronAPI.updateTimerStatus(true)
     timer.value = setInterval(() => {
       if (timeLeft.value > 0) {
         timeLeft.value--
-        // console.log('timeLeft',timeLeft.value)
 
         // 检查是否需要短休息提醒  
-        // (剩余时间大于短休息时间间隔的60%时提醒,小于60%不提醒，例如短休息时间间隔10分钟，剩余时间大于6分钟时才进行短休息)
-        if (timeLeft.value>=SHORT_BREAK_INTERVAL.value*0.6) {
+        // (剩余时间大于短休息时间间隔的60%时提醒,小于60%不提醒)
+        if (timeLeft.value >= SHORT_BREAK_INTERVAL.value * 0.6) {
           const timePassed = FOCUS_TIME.value - timeLeft.value
-          // console.log('timePassed',timePassed)
           if (timePassed - lastBreakTime.value >= SHORT_BREAK_INTERVAL.value) {
             lastBreakTime.value = timePassed
             notifyBreak('short')
             pauseTimer()
           }
         }
-
       } else {
         handleTimerComplete()
       }
@@ -314,51 +205,18 @@ const startTimer = () => {
   }
 }
 
+// 暂停计时器
 const pauseTimer = () => {
   clearInterval(timer.value)
   isRunning.value = false
+// 通知主进程状态变化
+  window.electronAPI.updateTimerStatus(false)
 }
 
-
-// 保存专注记录
-const saveToStorage = async (isIdle = false,taskName = currentTask.value?.text || '专注') => {
-
-  // 如果idle，则结束时间减去5分钟idle时间
-  const endTime = new Date(isIdle ? Date.now() - 1000 * 60 * 5 : Date.now())
-
-  
-  // 获取时间字符串
-  const endTimeStr = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`
-  const startTimeStr = `${focusStartTime.value.getHours().toString().padStart(2, '0')}:${focusStartTime.value.getMinutes().toString().padStart(2, '0')}`
-  
-  const duration = Math.floor((endTime - focusStartTime.value)/1000/60)
-  console.log('duration',duration)
-  if (duration > 4) {
-
-    await window.electronAPI.addFocusRecord({
-      taskName: taskName,
-      startTime: startTimeStr,
-      endTime: endTimeStr,
-      duration: duration
-    })
-
-    console.log('saveToStorage', focusStartTime.value.getTime(), duration)
-    // 保存总专注时间
-    // await window.electronAPI.updateTotalFocusTime(focusStartTime.value.getTime(), duration)
-  }
-
-  // 刷新历史记录
-  if (historyRef.value) {
-    historyRef.value.loadHistory()
-  }
-  console.log('saveToStorage')
-  totalFocusTime.value = await window.electronAPI.loadTotalFocusTime(formatDate(new Date()))
-}
-
-
+// 重置计时器
 const resetTimer = async (isIdle = false) => {
   pauseTimer()
-  console.log('resetTimer:isIdle',isIdle)
+  console.log('resetTimer:isIdle', isIdle)
 
   // 先保存当前的专注记录
   if (focusStartTime.value) {
@@ -367,52 +225,10 @@ const resetTimer = async (isIdle = false) => {
   }
   
   hasSaved.value = false
-
-  // 最后再重置开始时间
   focusStartTime.value = null
-  console.log('focusStartTime','重置啦')
-
   lastBreakTime.value = 0
   timeLeft.value = FOCUS_TIME.value
   isStart.value = false
-}
-
-
-
-// 修改休息提醒函数
-const notifyBreak = (breakType) => {
-  // 播放提示音
-  new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3').play()
-
-  let duration = breakType === 'short' ? SHORT_BREAK_TIME.value : LONG_BREAK_TIME.value
-  
-  // // 使用系统通知
-  // window.electronAPI.showNotification({
-  //   title: '休息提醒',
-  //   body: '闭上眼睛休息一会吧',
-  //   timeoutType: 'never'  // 通知不会自动消失
-  // })
-
-  // 使用 window.electronAPI 发送消息
-  window.electronAPI.showBreakReminder({
-    text: '闭上眼睛休息一会吧',
-    duration: duration,
-    breakType: breakType
-  })
-
-  // // 休息结束后自动开始专注
-  // setTimeout(() => {
-
-  //   // 排除计时器未开始的情况（例如idle后已经结束计时器）
-  //   if(isStart.value){
-  //     if(breakType === 'short'){
-  //       startTimer()
-  //     }else if(breakType==='long'){
-  //       startFocus(currentTask.value)
-  //     }
-  //   }
-    
-  // }, duration * 1000 + 2000)
 }
 
 // 处理计时完成
@@ -421,123 +237,86 @@ const handleTimerComplete = async () => {
   notifyBreak('long')
 }
 
-// 开始新任务
-const startNewTask = (task) => {
+// ======================================================================
+// 休息提醒功能
+// ======================================================================
+// 发送休息提醒
+const notifyBreak = (breakType) => {
+  // 播放提示音
+  new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3').play()
 
-  if(currentTask.value?.id === task.id){
-    currentTask.value = null
-  }
-  // 如果正在计时，则需要确认是否切换任务
-  // if (isRunning.value) {
-  //   const confirm = window.confirm('当前有正在进行的任务，是否切换到新任务？')
-  //   if (!confirm) return
-  // }
-  else{
-    currentTask.value = task
-  }
-  // resetTimer()
-  // startFocus(task)
+  let duration = breakType === 'short' ? SHORT_BREAK_TIME.value : LONG_BREAK_TIME.value
+  
+  // 使用 window.electronAPI 发送消息
+  window.electronAPI.showBreakReminder({
+    text: '闭上眼睛休息一会吧',
+    duration: duration,
+    breakType: breakType
+  })
 }
 
-// 格式化时间
-const formatTime = (seconds) => {
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+// ======================================================================
+// 数据存储功能
+// ======================================================================
+// 格式化日期为 YYYY-MM-DD
+const formatDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-const formatTimeMinutes = (minutes) => {
-  if (minutes < 60) {
-    return `${String(minutes)}min`
-  } else {
-    return `${String(Math.floor(minutes/60))}h ${String(minutes%60)}min`
-  }
-}
-
-// 组件卸载时清理定时器
-onUnmounted(() => {
-  if (timer.value) {
-    clearInterval(timer.value)
-  }
-})
-
-// // 添加新的方法
-// const extendTime = () => {
-//   timeLeft.value += 5 * 60; // 增加5分钟
-// }
-
-
-
-
-// 修改计算进度条宽度的方法
-const calculateProgressWidth = (focusTime) => {
-  const progress = (focusTime / DAILY_FOCUS_TARGET.value) * 100;
-  // 限制最大进度为100%
-  return `${Math.min(progress, 100)}%`;
-}
-
-// 格式化时间显示
-const formatHoursMinutes = (minutes) => {
-  const hrs = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hrs}hr ${mins}min`;
-}
-
-// 圆环进度计算
-const radius = 145
-const circumference = computed(() => 2 * Math.PI * radius)
-
-// 计算进度偏移量
-const progressOffset = computed(() => {
-  const progress = timeLeft.value / FOCUS_TIME.value
-  return circumference.value * (1 - progress)
-})
-
-// 修改 watch 逻辑，添加立即执行选项并检查标志变量
-watch(timeLeftMinutes, (newVal, oldVal) => {
-
-  // 更新托盘信息
-  let shortBreakTime = SHORT_BREAK_INTERVAL.value/60-(FOCUS_TIME.value/60-newVal)%(SHORT_BREAK_INTERVAL.value/60)
-  // 剩余小憩时间大于休息时间，则不显示
-  if(shortBreakTime>newVal){
-    shortBreakTime='--'
-  }
-  window.electronAPI.updateTray({
-      time: newVal,
-      taskName: currentTask.value?.text || '专注',
-      shortBreakTime: shortBreakTime
+// 保存专注记录
+const saveToStorage = async (isIdle = false, taskName = currentTask.value?.text || '专注') => {
+  // 如果idle，则结束时间减去5分钟idle时间
+  const endTime = new Date(isIdle ? Date.now() - 1000 * 60 * 5 : Date.now())
+  
+  // 获取时间字符串
+  const endTimeStr = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`
+  const startTimeStr = `${focusStartTime.value.getHours().toString().padStart(2, '0')}:${focusStartTime.value.getMinutes().toString().padStart(2, '0')}`
+  
+  const duration = Math.floor((endTime - focusStartTime.value) / 1000 / 60)
+  console.log('duration', duration)
+  
+  if (duration > 4) {
+    await window.electronAPI.addFocusRecord({
+      taskName: taskName,
+      startTime: startTimeStr,
+      endTime: endTimeStr,
+      duration: duration
     })
-
-
-  // 如果还没到监听时间，直接返回
-  if (!canWatch.value) return;
-
-    // 如果分钟数减少，则增加专注时间,排除重置计时器的情况（oldVal<newVal）,第一分钟计时不计入
-    if (oldVal>newVal&&oldVal!==FOCUS_TIME.value/60) {
-      console.log(oldVal,newVal)
-      // // 增加一分钟的专注时间,
-      totalFocusTime.value++;
-
-    // 如果选择了任务，则更新任务的已完成时间
-    if(currentTask.value) {
-      currentTask.value.completedTime++;
-
-      if (currentTask.value.completedTime >= currentTask.value.totalTime) {
-        currentTask.value.completed = true
-        
-        window.electronAPI.showNotification({
-          title: '任务到时提醒',
-          body: `任务 "${currentTask.value.text}" 到时了！`
-        })
-        updateTask(currentTask.value)
-        currentTask.value = null
-      }
-    }
   }
-}, { immediate: true });
 
+  // 刷新历史记录
+  if (historyRef.value) {
+    historyRef.value.loadHistory()
+  }
+  
+  totalFocusTime.value = await window.electronAPI.loadTotalFocusTime(formatDate(new Date()))
+}
 
-// 修改显示历史记录的方法
+// ======================================================================
+// 系统交互功能
+// ======================================================================
+// 监测主线程的idle信号
+const handleSystemIdle = (event, isIdle) => {
+  console.log('handleSystemIdle', isIdle)
+  
+  if (isIdle) {
+    // 监测到idle，重置计时器
+    resetTimer(isIdle)
+    console.log('监测到idle')
+  } else if (!isIdle && !isRunning.value && !isPause.value) {
+    // 监测到active，重新开始计时器
+    startTimer()
+    console.log('监测到active')
+  }
+}
+
+// ======================================================================
+// UI工具函数
+// ======================================================================
+// 显示历史记录
 const showFocusHistory = () => {
   showHistoryModal.value = true
 }
@@ -552,10 +331,187 @@ const showTip = (text, type = 'error') => {
   }, 3000)
 }
 
+// 格式化时间显示
+const formatTime = (seconds) => {
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
+// 格式化分钟为小时和分钟显示
+const formatTimeMinutes = (minutes) => {
+  if (minutes < 60) {
+    return `${String(minutes)}min`
+  } else {
+    return `${String(Math.floor(minutes/60))}h ${String(minutes%60)}min`
+  }
+}
+
+// 格式化为小时和分钟
+const formatHoursMinutes = (minutes) => {
+  const hrs = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return `${hrs}hr ${mins}min`
+}
+
+// 计算进度条宽度
+const calculateProgressWidth = (focusTime) => {
+  const progress = (focusTime / DAILY_FOCUS_TARGET.value) * 100
+  // 限制最大进度为100%
+  return `${Math.min(progress, 100)}%`
+}
+
+// ======================================================================
+// 生命周期钩子和监听器
+// ======================================================================
+// 监听当前任务变化，保存专注记录
+watch(currentTask, async (newTask, oldTask) => {
+  console.log('currentTask', newTask, oldTask)
+  if (!hasSaved.value) {
+    hasSaved.value = true
+    updateTask(currentTask.value) // 存储任务时间
+    await saveToStorage(false, oldTask?.text || '专注')  // 添加任务时间段
+    focusStartTime.value = new Date()
+  }
+})
+
+// 监听剩余时间分钟数变化
+watch(timeLeftMinutes, (newVal, oldVal) => {
+  // 更新托盘信息
+  let shortBreakTime = SHORT_BREAK_INTERVAL.value/60 - (FOCUS_TIME.value/60 - newVal) % (SHORT_BREAK_INTERVAL.value/60)
+  // 剩余小憩时间大于休息时间，则不显示
+  if (shortBreakTime > newVal) {
+    shortBreakTime = '--'
+  }
+  
+  window.electronAPI.updateTray({
+    time: newVal,
+    taskName: currentTask.value?.text || '专注',
+    shortBreakTime: shortBreakTime
+  })
+
+  // 如果还没到监听时间，直接返回
+  if (!canWatch.value) return
+
+  // 如果分钟数减少，则增加专注时间,排除重置计时器的情况
+  if (oldVal > newVal && oldVal !== FOCUS_TIME.value/60) {
+    console.log(oldVal, newVal)
+    // 增加一分钟的专注时间
+    totalFocusTime.value++
+
+    // 如果选择了任务，则更新任务的已完成时间
+    if (currentTask.value) {
+      currentTask.value.completedTime++
+
+      if (currentTask.value.completedTime >= currentTask.value.totalTime) {
+        currentTask.value.completed = true
+        
+        window.electronAPI.showNotification({
+          title: '任务到时提醒',
+          body: `任务 "${currentTask.value.text}" 到时了！`
+        })
+        
+        updateTask(currentTask.value)
+        currentTask.value = null
+      }
+    }
+  }
+}, { immediate: true })
+
+// 添加 watch 来控制页面滚动
+watch(showHistoryModal, (newValue) => {
+  const todoPomodoro = document.querySelector('.todo-pomodoro')
+  if (todoPomodoro) {
+    if (newValue) {
+      // 显示弹窗时禁止滚动
+      todoPomodoro.style.cssText = `
+        overflow: hidden !important;
+        height: 100vh;
+      `
+    } else {
+      // 关闭弹窗时恢复滚动
+      todoPomodoro.style.cssText = `
+        overflow: auto;
+        height: auto;
+      `
+    }
+  }
+})
+
+// 组件挂载时的初始化
+onMounted(async () => {
+  console.log('挂载')
+  
+  // 加载保存的任务
+  try {
+    const savedTasks = await window.electronAPI.loadTasks()
+    totalFocusTime.value = await window.electronAPI.loadTotalFocusTime(formatDate(new Date()))
+    
+    if (savedTasks && savedTasks.length > 0) {
+      tasks.value = savedTasks
+    }
+  } catch (error) {
+    console.error('Failed to load tasks:', error)
+  }
+
+  // 添加事件监听
+  document.addEventListener('click', closeTaskList)
+  window.electronAPI.onSystemIdle(handleSystemIdle)
+  
+  // 配置监听
+  window.electronAPI.onFocusDurationChanged((value) => {
+    FOCUS_TIME.value = value * 60
+    resetTimer()
+    startTimer()
+  })
+  
+  window.electronAPI.onShortBreakDurationChanged((value) => {
+    SHORT_BREAK_TIME.value = value
+  })
+
+  window.electronAPI.onShortBreakIntervalChanged((value) => {
+    SHORT_BREAK_INTERVAL.value = value * 60
+  })
+
+  window.electronAPI.onBreakDurationChanged((value) => {
+    LONG_BREAK_TIME.value = value * 60
+  })
+
+  window.electronAPI.onDailyFocusTargetChanged((value) => {
+    DAILY_FOCUS_TARGET.value = value * 60
+  })
+
+  // 延迟启动计时器
+  setTimeout(() => {
+    startTimer()
+  }, 1000)
+
+  // 在组件挂载后延迟2秒设置标志变量
+  setTimeout(() => {
+    canWatch.value = true
+    console.log('开始监听时间变化')
+  }, 2000)
+
+  // 监听来自主进程的消息
+  window.electronAPI.onToggleTimer(() => {
+    ControlTimer()
+  })
+})
+
+// 组件卸载时的清理
+onUnmounted(() => {
+  console.log('卸载')
+  document.removeEventListener('click', closeTaskList)
+  window.electronAPI.removeSystemIdleListener(handleSystemIdle)
+  if (timer.value) {
+    clearInterval(timer.value)
+  }
+  resetTimer()
+
+  // 可选：清理监听器
+  window.electronAPI.removeToggleTimer()
+})
 </script>
-
-
-
 
 <template>
   <div class="todo-pomodoro">
@@ -789,7 +745,7 @@ const showTip = (text, type = 'error') => {
     gap: 100px;
     width: 100%;
     height: 100vh;
-    padding: 40px 8%;
+    padding: 0px 8%;
     background-color: var(--bg-primary);
     color: var(--text-primary);
     min-height: 100vh; /* 确保容器至少有一个视窗高度 */
