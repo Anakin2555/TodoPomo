@@ -4,8 +4,10 @@ import IconYes from './icons/IconYes.vue'
 import IconDelete from './icons/IconDelete.vue'
 import IconStart from './icons/IconStart.vue'
 import IconEnd from './icons/IconEnd.vue'
+import IconEdit from './icons/IconEdit.vue'
 import FocusHistory from './FocusHistory.vue'
 import FocusHistoryModal from './FocusHistoryModal.vue'
+import TaskEditModal from './TaskEditModal.vue'
 
 // ======================================================================
 // 配置和常量
@@ -54,6 +56,12 @@ const showMessage = ref(false)
 const messageText = ref('')
 const messageType = ref('error')
 const historyRef = ref(null)
+// 没有选择任务的计数器，如果五分钟没有选择任务，则提醒
+const noTaskCounter = ref(0)
+
+// 添加状态管理
+const showTaskEditModal = ref(false)
+const editingTask = ref(null)
 
 // ======================================================================
 // 计算属性
@@ -103,9 +111,14 @@ const addTask = async () => {
 }
 
 // 更新任务
-const updateTask = async (task) => {
+const updateTask = async (task,isIdle = false) => {
   if (!task) return
   console.log({...task})
+
+  // 如果是因为idle触发保存，则结束时间减去5分钟idle时间
+  if(isIdle){
+    task.completedTime -= 5
+  }
   await window.electronAPI.updateTask({...task})
 }
 
@@ -220,9 +233,10 @@ const resetTimer = async (isIdle = false) => {
 
   // 先保存当前的专注记录
   if (focusStartTime.value) {
-    updateTask(currentTask.value)
+    updateTask(currentTask.value,isIdle)
     await saveToStorage(isIdle)
   }
+  
   
   hasSaved.value = false
   focusStartTime.value = null
@@ -243,7 +257,7 @@ const handleTimerComplete = async () => {
 // 发送休息提醒
 const notifyBreak = (breakType) => {
   // 播放提示音
-  new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3').play()
+  // new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3').play()
 
   let duration = breakType === 'short' ? SHORT_BREAK_TIME.value : LONG_BREAK_TIME.value
   
@@ -280,6 +294,7 @@ const saveToStorage = async (isIdle = false, taskName = currentTask.value?.text 
   
   if (duration > 4) {
     await window.electronAPI.addFocusRecord({
+      date: endTime.toISOString().split('T')[0],
       taskName: taskName,
       startTime: startTimeStr,
       endTime: endTimeStr,
@@ -377,6 +392,22 @@ watch(currentTask, async (newTask, oldTask) => {
 
 // 监听剩余时间分钟数变化
 watch(timeLeftMinutes, (newVal, oldVal) => {
+
+  // 没有选择任务的计数器，如果三分钟没有选择任务，则提醒
+  if(!currentTask.value&&newVal-oldVal===-1) {
+    noTaskCounter.value++
+  } else {
+    noTaskCounter.value = 0
+  }
+  
+  if(noTaskCounter.value >= 3) {
+    window.electronAPI.showNotification({
+      title: '任务选择提醒',
+      body: '请选择或新建一个任务'
+    })
+    noTaskCounter.value = 0
+  }
+
   // 更新托盘信息
   let shortBreakTime = SHORT_BREAK_INTERVAL.value/60 - (FOCUS_TIME.value/60 - newVal) % (SHORT_BREAK_INTERVAL.value/60)
   // 剩余小憩时间大于休息时间，则不显示
@@ -511,6 +542,33 @@ onUnmounted(() => {
   // 可选：清理监听器
   window.electronAPI.removeToggleTimer()
 })
+
+// 添加处理函数
+const openTaskEdit = (task) => {
+  editingTask.value = task
+  showTaskEditModal.value = true
+}
+
+
+// 编辑弹窗保存更新任务
+const handleTaskUpdate = async (updatedTask) => {
+  const index = tasks.value.findIndex(t => t.id === updatedTask.id)
+  if (index !== -1) {
+    tasks.value[index] = updatedTask
+    await window.electronAPI.updateTask(updatedTask)
+  }
+}
+
+// 编辑弹窗删除任务
+const handleTaskDelete = async (taskId) => {
+  tasks.value = tasks.value.filter(t => t.id !== taskId)
+  await window.electronAPI.deleteTask(taskId)
+  if (currentTask.value?.id === taskId) {
+    currentTask.value = null
+  }
+ 
+  
+}
 </script>
 
 <template>
@@ -562,17 +620,17 @@ onUnmounted(() => {
 
 
           <!-- 当前模式 -->
-          <div class="mode-label" >专注</div>
+          <div class="mode-label" :style="{color: isPause ? 'white' : 'var(--bright-grey)'}">{{!isPause ? '进行中' : '已暂停'}}</div>
 
           <!-- 是否暂停 -->
-          <div class="mode-pause" :style="{visibility: !isStart||isRunning ? 'hidden' : 'visible'}" >已暂停</div>
+          <!-- <div class="mode-pause" :style="{visibility: !isStart||isRunning ? 'hidden' : 'visible'}" >已暂停</div> -->
 
           <!-- 计时器文字 -->
           <div class="timer">{{ formatTime(timeLeft) }}</div>
 
           <!-- 任务文本框 -->
           <div class="timer-label" @click="chooseTask" >
-            {{ currentTask ? 'Going: ' + currentTask.text : 'Select a task to focus' }}
+            {{ currentTask ?  currentTask.text : 'Select a task to focus' }}
           </div>
 
           <!-- 选择任务列表 弹窗 -->
@@ -634,16 +692,33 @@ onUnmounted(() => {
           </button>
         </div>
 
+
+        <!-- 任务列表 -->
         <div class="todo-list">
           <div 
             v-for="task in tasks" 
             :key="task.id" 
             class="todo-item"
-            :class="{ 'active-task': currentTask?.id === task.id }"
+            :class="{ 
+              'active-task': currentTask?.id === task.id,
+              'completed-task': task.completed 
+            }"
+            @click.stop="!task.completed && startNewTask(task)"
           >
             <div class="todo-content">
               <div class="task-details">
-                <span :class="{ completed: task.completed }">{{ task.text }}</span>
+                <div class="task-text-container">
+                  <span :class="{ completed: task.completed }">{{ task.text }}</span>
+                  
+                  <!-- 编辑按钮 -->
+                  <button 
+                    @click.stop="openTaskEdit(task)" 
+                    class="edit-button"
+                  >
+                    <IconEdit />
+                  </button> 
+                </div>
+                
                 <div class="task-time-info">
                   <!-- 时间段调整按钮
                   <button 
@@ -669,23 +744,13 @@ onUnmounted(() => {
                       ></div>
                     </div>
                   </div>
-
-                  
                 </div>
               </div>
-
-              <!-- 删除按钮 -->
-              <button 
-                @click="deleteTask(task)" 
-                class="delete-button"
-              >
-                <IconDelete />
-              </button> 
 
               <!-- 开始按钮 --> 
               <button 
                 :disabled="task.completed"
-                @click="startNewTask(task)" 
+                @click.stop="startNewTask(task)" 
                 class="focus-button"
                 :class="{'focus-button-active': currentTask?.id === task.id}"
               >
@@ -694,7 +759,6 @@ onUnmounted(() => {
               </button> 
               
             </div>
-            
           </div>
         </div>
       </div>
@@ -729,6 +793,15 @@ onUnmounted(() => {
     <FocusHistoryModal 
       :is-visible="showHistoryModal"
       @close="showHistoryModal = false"
+    />
+
+    <!-- 添加任务编辑弹窗 -->
+    <TaskEditModal
+      :is-visible="showTaskEditModal"
+      :task="editingTask"
+      @close="showTaskEditModal = false"
+      @update="handleTaskUpdate"
+      @delete="handleTaskDelete"
     />
 
   </div>
@@ -826,14 +899,14 @@ onUnmounted(() => {
 .timer {
   font-size: 64px;
   font-weight: 600;
-  margin-top: -20px;
-  margin-bottom: 10px;
+  margin-top: -10px;
+  margin-bottom: -6px;
 }
 
 .timer-label {
   cursor: pointer;
   font-size: 16px;
-  color: #888;
+  color: var(--primary-color);
 }
 /* 弹窗选择任务 */
 .task-list {
@@ -1077,10 +1150,16 @@ button {
   border-radius: 16px;
   border-bottom: 1px solid var(--light-grey);
   transition: background-color 0.3s ease;
+  cursor: pointer;
 }
-.todo-item:hover .delete-button{
+.todo-item:hover{
+  background-color: var(--light-grey);
+}
+.todo-item:hover .edit-button{
   opacity: 1;
+
 }
+
 
 .todo-item.active-task {
   background-color: var(--primary-color-transparent);
@@ -1089,6 +1168,11 @@ button {
 
 /* 可选：调整激活状态下的文字颜色 */
 .todo-item.active-task .task-details {
+  color: #000;
+}
+
+.todo-item.active-task .edit-button{
+  background-color: var(--light-grey);
   color: #000;
 }
 
@@ -1122,6 +1206,12 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.task-text-container{
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .task-score {
@@ -1173,8 +1263,8 @@ button:hover:not(:disabled) {
 
 .mode-label {
   font-size: 16px;
-  color: var(--primary-color);
-  margin-top: 8px;
+  color: var(--bright-grey);
+  margin-top: 20px;
 }
 
 .mode-pause{
@@ -1234,17 +1324,18 @@ button:hover:not(:disabled) {
   transform: translateX(20px);
   opacity: 0;
 }
-.delete-button {
+.edit-button {
   border-radius: 8px;
   opacity: 0;  /* 使用 opacity 代替 visibility */
   transition: opacity 0.2s ease;  /* 添加过渡效果，缩短时间 */
-  background-color: var(--light-grey);
+  background-color: var(--mid-grey);
   color: #666;
   height: 28px;
-  padding: 4px;
+  width: 28px;
+  padding: 7px;
 }
 
-.todo-item:hover .delete-button {
+.todo-item:hover .edit-button { 
   opacity: 1;
 }
 
@@ -1320,6 +1411,23 @@ button:hover:not(:disabled) {
 
 .right-section::-webkit-scrollbar-thumb:hover {
   background: var(--hover-bg);
+}
+
+.completed-task {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--dark-grey);
+}
+
+.completed-task:hover {
+  background-color: var(--dark-grey);
+}
+
+
+
+.completed-task .focus-button {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 </style> 

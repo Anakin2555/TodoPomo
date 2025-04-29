@@ -94,7 +94,7 @@ const loadDayRecords = async (date) => {
 const changeMonth = async (increment) => {
   const newDate = new Date(currentDate.value)
   newDate.setMonth(newDate.getMonth() + increment)
-  newDate.setDate(selectedDate.value.getDate())
+  newDate.setDate(1)
   currentDate.value = newDate
   console.log(newDate,new Date())
   if(newDate.getMonth()===new Date().getMonth()&&newDate.getDate()===new Date().getDate()){
@@ -247,12 +247,12 @@ onMounted(async () => {
           </div>
         </section>
 
-        <!-- 历史记录部分 -->
+        <!-- 右侧历史记录部分 -->
         <section class="history-section">
           <header class="history-header">
             <h2>{{ formatDate(selectedDate) }} 专注记录</h2>
             <div class="total-focus-time">
-              总专注时间：{{ formatTimeDisplay(totalFocusTime) }}
+              总时间：{{ formatTimeDisplay(totalFocusTime) }}
             </div>
           </header>
 

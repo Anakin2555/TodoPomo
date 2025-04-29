@@ -6,11 +6,11 @@ const store = new Store({
   name: 'settings',
   defaults: {
     autoLaunch: false,
-    focusDuration: 25,
-    shortBreakInterval: 15,
-    shortBreakDuration: 30,
-    longBreakDuration: 5,
-    dailyFocusTarget: 8
+    focusDuration: 25,          // 专注时长（分钟）
+    shortBreakInterval: 15,     // 小憩间隔（分钟）
+    shortBreakDuration: 30,     // 小憩时长（秒）
+    longBreakDuration: 5,       // 长休息时长（分钟）
+    dailyFocusTarget: 8         // 每日目标（小时）
   }
 })
 
@@ -181,11 +181,28 @@ function createMenu(mainWindow) {
 
   // 初始化时发送所有设置到渲染进程
   mainWindow?.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('auto-launch-changed', store.get('autoLaunch'))
-    mainWindow.webContents.send('focus-duration-changed', store.get('focusDuration'))
-    mainWindow.webContents.send('short-break-interval-changed', store.get('shortBreakInterval'))
-    mainWindow.webContents.send('short-break-duration-changed', store.get('shortBreakDuration'))
-    mainWindow.webContents.send('break-duration-changed', store.get('longBreakDuration'))
+    // 延迟 2 秒发送配置，确保 Vue 应用已完全初始化
+    setTimeout(() => {
+      // 获取所有配置并发送到渲染进程
+      const settings = {
+        autoLaunch: store.get('autoLaunch'),
+        focusDuration: store.get('focusDuration'),
+        shortBreakInterval: store.get('shortBreakInterval'),
+        shortBreakDuration: store.get('shortBreakDuration'),
+        longBreakDuration: store.get('longBreakDuration'),
+        dailyFocusTarget: store.get('dailyFocusTarget')
+      }
+
+      console.log('Sending settings to renderer:', settings)
+
+      // 发送所有配置
+      mainWindow.webContents.send('auto-launch-changed', settings.autoLaunch)
+      mainWindow.webContents.send('focus-duration-changed', settings.focusDuration)
+      mainWindow.webContents.send('short-break-interval-changed', settings.shortBreakInterval)
+      mainWindow.webContents.send('short-break-duration-changed', settings.shortBreakDuration)
+      mainWindow.webContents.send('break-duration-changed', settings.longBreakDuration)
+      mainWindow.webContents.send('daily-focus-target-changed', settings.dailyFocusTarget)
+    }, 2000) // 延迟 2 秒
   })
 }
 

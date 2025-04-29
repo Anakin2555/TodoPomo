@@ -153,12 +153,12 @@
         // 添加音频事件监听器
         startAudio.addEventListener('error', (e) => {
           document.getElementById('audio-status').className = 'error-message';
-          document.getElementById('audio-status').textContent = `音频错误: ${e.target.error.message || '未知错误'}`;
+          document.getElementById('audio-status').textContent = `休息开始音频错误: ${e.target.error.message || '未知错误'}`;
         });
 
         endAudio.addEventListener('error', (e) => {
           document.getElementById('audio-status').className = 'error-message';
-          document.getElementById('audio-status').textContent = `音频错误: ${e.target.error.message || '未知错误'}`;
+          document.getElementById('audio-status').textContent = `休息结束音频错误: ${e.target.error.message || '未知错误'}`;
         });
 
         

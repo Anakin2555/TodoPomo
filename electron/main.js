@@ -46,6 +46,31 @@ if (!gotTheLock) {
   return
 }
 
+const isWindows = process.platform === 'win32';
+let needsFocusFix = false;
+let triggeringProgrammaticBlur = false;
+
+app.on('blur', (event) => {
+  if(!triggeringProgrammaticBlur) {
+    needsFocusFix = true;
+  }
+})
+
+app.on('focus', (event) => {
+  if(isWindows && needsFocusFix) {
+    needsFocusFix = false;
+    triggeringProgrammaticBlur = true;
+    setTimeout(function () {
+      win.blur();
+      win.focus();
+      setTimeout(function () {
+        triggeringProgrammaticBlur = false;
+      }, 100);
+    }, 100);
+  }
+})
+
+
 // 监听第二个实例的启动
 app.on('second-instance', (event, commandLine, workingDirectory) => {
   // 如果存在主窗口，则显示并聚焦它
@@ -448,6 +473,18 @@ function cleanupActivityMonitoring() {
 
 function createTray() {
   tray = new Tray(path.join(__dirname, 'assets/icon.png'))
+  
+  // 添加点击事件处理
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore()
+      }
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+  
   updateTrayMenu()
 }
 
@@ -541,6 +578,7 @@ ipcMain.handle('delete-task', (event, taskId) => {
     dailyRecords[today].tasks = dailyRecords[today].tasks.filter(t => t.id !== taskId)
     store.set('dailyRecords', dailyRecords)
   }
+  console.log('delete-task',taskId)
   return taskId
 })
 
@@ -589,15 +627,16 @@ ipcMain.handle('load-total-focus-time', (event, date) => {
 
 // 添加历史记录相关的IPC处理
 ipcMain.handle('add-focus-record', (event, record) => {
-  const today = getTodayString()
-  const yesterday = getYesterdayString()
+  // const today = getTodayString()
+  // const yesterday = getYesterdayString()
   const dailyRecords = store.get('dailyRecords', {})
 
   // 判断是否跨天（结束时间小于开始时间）
-  const isOvernight = record.endTime < record.startTime
+  //const isOvernight = record.endTime < record.startTime
 
   // 确定记录应该保存到哪一天
-  const targetDate = isOvernight ? yesterday : today
+  //const targetDate = isOvernight ? yesterday : today】
+  const targetDate = record.date
 
   // 确保目标日期的记录存在
   if (!dailyRecords[targetDate]) {
@@ -646,18 +685,34 @@ ipcMain.handle('load-month-records', (event, year, month) => {
 
 // 添加 IPC 处理程序
 ipcMain.on('show-notification', (event, options) => {
-  console.log('show-notification',options)
-  new Notification({
+  console.log('show-notification', options)
+  const notification = new Notification({
     title: options.title || '提醒',  // 添加默认标题
     body: options.body || '',        // 添加默认内容
     silent: false
-  }).show()
+  })
+
+  // 添加点击事件处理
+  notification.on('click', () => {
+    // 确保主窗口存在
+    if (mainWindow) {
+      // 如果窗口最小化了，恢复它
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore()
+      }
+      // 显示并聚焦窗口
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+
+  notification.show()
 })
 
 // 监听渲染进程发来的状态更新
 ipcMain.on('update-timer-status', (_, running) => {
   isTimerRunning = running
-  console.log(isTimerRunning)
+  // console.log(isTimerRunning)
   if(!isTimerRunning){
     tray.setToolTip(`已暂停`)
   }else{
@@ -691,11 +746,45 @@ app.on('activate', () => {
 })
 
 // 确保在应用退出时清理托盘图标
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
+  console.log('before-quit')
+  app.isQuitting = true
+  
+  // 发送 idle 信号给渲染进程，触发保存操作
+  mainWindow?.webContents.send('system-idle', true)
+        
+  // 等待一小段时间确保渲染进程有足够时间保存数据
+  await new Promise(resolve => setTimeout(resolve, 3000))
+  
+  // 清理活动监控
+  cleanupActivityMonitoring()
+  
+  // 销毁所有窗口
+  if (mainWindow) {
+    mainWindow.destroy()
+  }
+  
+  // 清理提醒窗口
+  if (reminderWindows.length > 0) {
+    reminderWindows.forEach(window => {
+      if (!window.isDestroyed()) {
+        window.destroy()
+      }
+    })
+  }
+  
+  // 清理提醒计时器
+  if (reminderTimer) {
+    clearTimeout(reminderTimer)
+    reminderTimer = null
+  }
+  
+  // 销毁托盘
   if (tray) {
     tray.destroy()
     tray = null
   }
+  
 })
 
 // 更新托盘菜单项
@@ -709,7 +798,7 @@ function updateTrayMenu() {
         updateTrayMenu()
       }
     },
-    { type: 'separator' }, // 添加分隔线
+    { type: 'separator' },
     {
       label: '主界面',
       click: () => {
@@ -718,8 +807,16 @@ function updateTrayMenu() {
     },
     {
       label: '退出',
-      click: () => {
+      click: async () => {        
+
+        console.log('托盘手动退出')
+
+        // 触发beforequit
         app.quit()
+        // 强制退出应用
+        setTimeout(() => {
+          app.exit(0)
+        }, 5000)
       }
     }
   ])
