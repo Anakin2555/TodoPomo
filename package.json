@@ -41,6 +41,7 @@
       ]
     },
     "win": {
+      "appId": "com.anakin.todo-pomo",
       "icon": "build/icon.ico",
       "target": [
         {

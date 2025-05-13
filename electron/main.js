@@ -90,10 +90,53 @@ app.whenReady().then(() => {
     createWindow()
   }
 
-  // 监听屏幕解锁事件
-  powerMonitor.on('unlock-screen', () => {
-    console.log('屏幕亮屏')
+  // // 监听屏幕解锁事件
+  // powerMonitor.on('unlock-screen', () => {
+  //   console.log('屏幕亮屏')
 
+  //   // 恢复活动监控
+  //   setupActivityMonitoring()
+
+  //   setTimeout(() => {
+  //     // 暂停番茄钟计时器
+  //     isIdle = true
+  //     mainWindow?.webContents.send('system-idle', true)
+  //     console.log('系统唤醒重置计时器')
+  //   }, 2000)
+  // })
+
+  // // 监听屏幕锁定事件
+  // powerMonitor.on('lock-screen', () => {
+  //   console.log('屏幕息屏')
+
+  //   // 关闭提醒窗口，息屏时不能关闭，否则有漏洞跳过休息
+  //   // if (reminderTimer) {
+  //   //   clearTimeout(reminderTimer)
+  //   //   reminderTimer = null
+  //   // }
+
+  //   // if (reminderWindows.length > 0) {
+  //   //   reminderWindows.forEach(window => {
+  //   //     if (!window.isDestroyed()) {
+  //   //       window.close()
+  //   //     }
+  //   //   })
+  //   // }
+    
+  //   // 例如：暂停番茄钟计时器
+  //   isIdle = true
+  //   mainWindow?.webContents.send('system-idle', true)
+  //   console.log('息屏发送idle信号')
+
+  //   // 停止活动监控
+  //   cleanupActivityMonitoring()
+
+  // })
+
+  // 监听系统唤醒事件
+  powerMonitor.on('resume', () => {
+    console.log('系统唤醒')
+    
     // 恢复活动监控
     setupActivityMonitoring()
 
@@ -102,14 +145,14 @@ app.whenReady().then(() => {
       isIdle = true
       mainWindow?.webContents.send('system-idle', true)
       console.log('系统唤醒重置计时器')
-    }, 2000)
+    }, 3000)
   })
 
-  // 监听屏幕锁定事件
-  powerMonitor.on('lock-screen', () => {
-    console.log('屏幕息屏')
-
-    // 关闭提醒窗口，息屏时不能关闭，否则有漏洞跳过休息
+  // 监听系统睡眠事件
+  powerMonitor.on('suspend', () => {
+    console.log('系统睡眠')
+    
+    // // 关闭提醒窗口
     // if (reminderTimer) {
     //   clearTimeout(reminderTimer)
     //   reminderTimer = null
@@ -122,59 +165,16 @@ app.whenReady().then(() => {
     //     }
     //   })
     // }
-    
-    // 例如：暂停番茄钟计时器
+
     isIdle = true
     mainWindow?.webContents.send('system-idle', true)
-    console.log('息屏发送idle信号')
+    console.log('睡眠发送idle信号')
+    
+    
 
     // 停止活动监控
     cleanupActivityMonitoring()
-
   })
-
-  // // 监听系统唤醒事件
-  // powerMonitor.on('resume', () => {
-  //   console.log('系统唤醒')
-    
-  //   // 恢复活动监控
-  //   setupActivityMonitoring()
-
-  //   setTimeout(() => {
-  //     // 暂停番茄钟计时器
-  //     isIdle = true
-  //     mainWindow?.webContents.send('system-idle', true)
-  //     console.log('系统唤醒重置计时器')
-  //   }, 3000)
-  // })
-
-  // // 监听系统睡眠事件
-  // powerMonitor.on('suspend', () => {
-  //   console.log('系统睡眠')
-    
-  //   // 关闭提醒窗口
-  //   if (reminderTimer) {
-  //     clearTimeout(reminderTimer)
-  //     reminderTimer = null
-  //   }
-
-  //   if (reminderWindows.length > 0) {
-  //     reminderWindows.forEach(window => {
-  //       if (!window.isDestroyed()) {
-  //         window.close()
-  //       }
-  //     })
-  //   }
-    
-    
-
-  //   // 停止活动监控
-  //   cleanupActivityMonitoring()
-  // })
-
-  
-
-  
   
   createTray()
 })
@@ -295,12 +295,12 @@ function createReminderWindow(text, duration) {
       
       // 注入JavaScript来捕获和阻止键盘事件
       reminderWindow.webContents.executeJavaScript(`
-        document.addEventListener('keydown', (e) => {
-          // 阻止所有键盘事件
-          e.preventDefault();
-          e.stopPropagation();
-          return false;
-        }, true);
+        // document.addEventListener('keydown', (e) => {
+        //   // 阻止所有键盘事件
+        //   e.preventDefault();
+        //   e.stopPropagation();
+        //   return false;
+        // }, true);
         
         // 禁用右键菜单
         document.addEventListener('contextmenu', (e) => {
@@ -687,9 +687,11 @@ ipcMain.handle('load-month-records', (event, year, month) => {
 ipcMain.on('show-notification', (event, options) => {
   console.log('show-notification', options)
   const notification = new Notification({
-    title: options.title || '提醒',  // 添加默认标题
-    body: options.body || '',        // 添加默认内容
-    silent: false
+    title: options.title || '提醒',
+    body: options.body || '',
+    silent: false,
+    appId: 'TodoPomo',
+    icon: path.join(__dirname, 'assets/icon.png')
   })
 
   // 添加点击事件处理
@@ -715,8 +717,10 @@ ipcMain.on('update-timer-status', (_, running) => {
   // console.log(isTimerRunning)
   if(!isTimerRunning){
     tray.setToolTip(`已暂停`)
+    cleanupActivityMonitoring()
   }else{
     tray.setToolTip(`运行中`)
+    setupActivityMonitoring()
   }
   updateTrayMenu()
 })
@@ -732,6 +736,7 @@ app.on(
 
 // 处理窗口全部关闭事件
 app.on('window-all-closed', () => {
+  console.log('window-all-closed')
   cleanupActivityMonitoring()
   if (process.platform !== 'darwin') {
     app.quit()
@@ -822,5 +827,13 @@ function updateTrayMenu() {
   ])
   tray.setContextMenu(contextMenu)
 }
+
+if (process.platform === 'win32') {
+  // app.setAppUserModelId(process.execPath) // 打包后使用
+  // 或者使用固定的应用ID
+  app.setAppUserModelId('TodoPomo')
+}
+
+app.setName('TodoPomo') // 设置应用名称
 
 

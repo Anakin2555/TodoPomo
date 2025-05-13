@@ -175,6 +175,7 @@ const calendarDays = computed(() => {
 // 生命周期钩子
 // ======================================================================
 onMounted(async () => {
+  console.log('FocusHistoryModal mounted')
   await loadMonthRecords() // 加载当月记录数据
   await loadDayRecords(selectedDate.value) // 加载当前选中日期的记录
 })

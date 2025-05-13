@@ -1,12 +1,11 @@
 <script setup>
-import { ref, onUnmounted, computed, watch, onMounted } from 'vue'
+import { ref, onUnmounted, computed, watch, onMounted, defineAsyncComponent } from 'vue'
 import IconYes from './icons/IconYes.vue'
 import IconDelete from './icons/IconDelete.vue'
 import IconStart from './icons/IconStart.vue'
 import IconEnd from './icons/IconEnd.vue'
 import IconEdit from './icons/IconEdit.vue'
 import FocusHistory from './FocusHistory.vue'
-import FocusHistoryModal from './FocusHistoryModal.vue'
 import TaskEditModal from './TaskEditModal.vue'
 
 // ======================================================================
@@ -22,14 +21,14 @@ const DAILY_FOCUS_TARGET = ref(8 * 60)   // 每日目标专注时间（8小时�
 // 状态管理
 // ======================================================================
 // 计时器状态
-const timeLeft = ref(FOCUS_TIME.value)
-const isStart = ref(false)
-const isPause = ref(false)
-const isRunning = ref(false)
-const timer = ref(null)
-const lastBreakTime = ref(0)
-const hasSaved = ref(false)
-const focusStartTime = ref(null)
+const timeLeft = ref(FOCUS_TIME.value) // 剩余时间
+const isStart = ref(false) // 是否开始计时
+const isPause = ref(false) // 用户暂停计时，暂停后计时器不会自动开始
+const isRunning = ref(false) // 是否正在计时，比如短休息时isStart为true，isRunning为false
+const timer = ref(null) // 计时器
+const lastBreakTime = ref(0) // 上次休息时间
+const hasSaved = ref(false) // 是否保存过专注记录
+const focusStartTime = ref(null) // 专注开始时间
 const canWatch = ref(false) // 是否开始监听时间变化
 
 // 任务相关状态
@@ -179,6 +178,7 @@ const ControlTimer = () => {
   if (isRunning.value && !isPause.value) {
     isPause.value = true
     pauseTimer()
+    resetTimer()
   } else {
     startTimer()
   }
@@ -191,12 +191,14 @@ const startTimer = () => {
     // 记录开始时间
     if (!isStart.value) {
       focusStartTime.value = new Date()
+      console.log('focusStartTime', focusStartTime.value)
     }
     
     isRunning.value = true
     isStart.value = true
     isPause.value = false
     window.electronAPI.updateTimerStatus(true)
+
     timer.value = setInterval(() => {
       if (timeLeft.value > 0) {
         timeLeft.value--
@@ -215,6 +217,7 @@ const startTimer = () => {
         handleTimerComplete()
       }
     }, 1000)
+
   }
 }
 
@@ -222,12 +225,14 @@ const startTimer = () => {
 const pauseTimer = () => {
   clearInterval(timer.value)
   isRunning.value = false
-// 通知主进程状态变化
+
+  // 通知主进程状态变化
   window.electronAPI.updateTimerStatus(false)
 }
 
 // 重置计时器
 const resetTimer = async (isIdle = false) => {
+
   pauseTimer()
   console.log('resetTimer:isIdle', isIdle)
 
@@ -238,7 +243,7 @@ const resetTimer = async (isIdle = false) => {
   }
   
   
-  hasSaved.value = false
+  // hasSaved.value = false
   focusStartTime.value = null
   lastBreakTime.value = 0
   timeLeft.value = FOCUS_TIME.value
@@ -382,12 +387,12 @@ const calculateProgressWidth = (focusTime) => {
 // 监听当前任务变化，保存专注记录
 watch(currentTask, async (newTask, oldTask) => {
   console.log('currentTask', newTask, oldTask)
-  if (!hasSaved.value) {
-    hasSaved.value = true
+  // if (!hasSaved.value) {
+  //   hasSaved.value = true
     updateTask(currentTask.value) // 存储任务时间
     await saveToStorage(false, oldTask?.text || '专注')  // 添加任务时间段
     focusStartTime.value = new Date()
-  }
+  // }
 })
 
 // 监听剩余时间分钟数变化
@@ -442,7 +447,7 @@ watch(timeLeftMinutes, (newVal, oldVal) => {
           body: `任务 "${currentTask.value.text}" 到时了！`
         })
         
-        updateTask(currentTask.value)
+        // updateTask(currentTask.value)
         currentTask.value = null
       }
     }
@@ -512,18 +517,18 @@ onMounted(async () => {
     DAILY_FOCUS_TARGET.value = value * 60
   })
 
-  // 延迟启动计时器
-  setTimeout(() => {
-    startTimer()
-  }, 1000)
+  // // 程序启动时延迟启动计时器，现在不需要了，因为主线程发送专注持续时间会自动开始计时
+  // setTimeout(() => {
+  //   startTimer()
+  // }, 1000)
 
-  // 在组件挂载后延迟2秒设置标志变量
+  // 在组件挂载后延迟2秒允许监听分钟数变化
   setTimeout(() => {
     canWatch.value = true
     console.log('开始监听时间变化')
   }, 2000)
 
-  // 监听来自主进程的消息
+  // 监听主进程托盘 计时器控制请求
   window.electronAPI.onToggleTimer(() => {
     ControlTimer()
   })
@@ -569,6 +574,11 @@ const handleTaskDelete = async (taskId) => {
  
   
 }
+
+// 修改后：使用动态导入
+const FocusHistoryModal = defineAsyncComponent(() => 
+  import('./FocusHistoryModal.vue')
+)
 </script>
 
 <template>
@@ -790,10 +800,16 @@ const handleTaskDelete = async (taskId) => {
     </div>
 
     <!-- 添加历史记录弹窗 -->
-    <FocusHistoryModal 
-      :is-visible="showHistoryModal"
-      @close="showHistoryModal = false"
-    />
+    <Suspense>
+      <FocusHistoryModal 
+        v-if="showHistoryModal"
+        :is-visible="showHistoryModal"
+        @close="showHistoryModal = false"
+      />
+      <template #fallback>
+        <div>加载中...</div>
+      </template>
+    </Suspense>
 
     <!-- 添加任务编辑弹窗 -->
     <TaskEditModal
