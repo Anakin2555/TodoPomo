@@ -1,5 +1,5 @@
-const { app, BrowserWindow, powerMonitor, ipcMain, screen, Tray, Menu, Notification } = require('electron')
-const { GlobalKeyboardListener } = require('node-global-key-listener')
+const { app, BrowserWindow, powerMonitor, ipcMain, screen, Tray, Menu, Notification, nativeImage } = require('electron')
+// const { GlobalKeyboardListener } = require('node-global-key-listener')
 const robot = require('robotjs')
 const path = require("path")
 const Store = require('electron-store')
@@ -247,14 +247,14 @@ function createReminderWindow(text, duration) {
       x: bounds.x,
       y: bounds.y,
       frame: false,
-      autoHideMenuBar: true,
+      autoHideMenuBar: false,
       transparent: true,
-      alwaysOnTop: true,
+      alwaysOnTop: false,
       skipTaskbar: true,
-      resizable: false,  // 禁止调整窗口大小
-      movable: false,    // 禁止移动窗口
-      fullscreenable: true,
-      kiosk: true,       // 启用kiosk模式，可以帮助禁用某些系统快捷键
+      resizable: true,  // 禁止调整窗口大小
+      movable: true,    // 禁止移动窗口
+      fullscreenable: false,
+      kiosk: false,       // 启用kiosk模式，可以帮助禁用某些系统快捷键
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
@@ -268,19 +268,19 @@ function createReminderWindow(text, duration) {
     reminderWindow.loadFile(path.join(__dirname, 'reminder.html'))
 
     // 设置窗口为全屏
-    reminderWindow.setFullScreen(true)
+    reminderWindow.setFullScreen(false)
     
     // 禁用窗口的最大化、最小化和关闭按钮
-    reminderWindow.setMinimizable(false)
-    reminderWindow.setMaximizable(false)
+    // reminderWindow.setMinimizable(false)
+    // reminderWindow.setMaximizable(false)
     
     // 设置窗口始终保持在最顶层
-    reminderWindow.setAlwaysOnTop(true, 'screen-saver')
+    // reminderWindow.setAlwaysOnTop(true, 'screen-saver')
     
     // 监听窗口获取焦点事件，确保窗口始终保持焦点
-    reminderWindow.on('blur', () => {
-      reminderWindow.focus()
-    })
+    // reminderWindow.on('blur', () => {
+    //   reminderWindow.focus()
+    // })
     
     // 在页面加载完成后，注册全局快捷键拦截
     reminderWindow.webContents.on('did-finish-load', () => {
@@ -294,20 +294,20 @@ function createReminderWindow(text, duration) {
       })
       
       // 注入JavaScript来捕获和阻止键盘事件
-      reminderWindow.webContents.executeJavaScript(`
-        // document.addEventListener('keydown', (e) => {
-        //   // 阻止所有键盘事件
-        //   e.preventDefault();
-        //   e.stopPropagation();
-        //   return false;
-        // }, true);
+      // reminderWindow.webContents.executeJavaScript(`
+      //   // document.addEventListener('keydown', (e) => {
+      //   //   // 阻止所有键盘事件
+      //   //   e.preventDefault();
+      //   //   e.stopPropagation();
+      //   //   return false;
+      //   // }, true);
         
-        // 禁用右键菜单
-        document.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          return false;
-        }, true);
-      `)
+      //   // 禁用右键菜单
+      //   document.addEventListener('contextmenu', (e) => {
+      //     e.preventDefault();
+      //     return false;
+      //   }, true);
+      // `)
     })
     
     // // 注册全局快捷键拦截器
@@ -472,7 +472,28 @@ function cleanupActivityMonitoring() {
 }
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, 'assets/icon.png'))
+  const isMac = process.platform === 'darwin'
+  
+  if (isMac) {
+    // 使用 nativeImage 创建合适大小的图标
+    const icon = nativeImage.createFromPath(path.join(__dirname, 'assets/icon.png'))
+    const trayIcon = icon.resize({
+      width: 16,
+      height: 16,
+      quality: 'best'
+    })
+    // 设置为模板图片
+    trayIcon.setTemplateImage(true)
+    
+    tray = new Tray(trayIcon)
+    // 设置托盘图标的工具提示
+    tray.setToolTip('TodoPomo')
+    // 忽略双击事件
+    tray.setIgnoreDoubleClickEvents(true)
+  } else {
+    // Windows下使用普通图标
+    tray = new Tray(path.join(__dirname, 'assets/icon.png'))
+  }
   
   // 添加点击事件处理
   tray.on('click', () => {
@@ -794,6 +815,8 @@ app.on('before-quit', async () => {
 
 // 更新托盘菜单项
 function updateTrayMenu() {
+  const isMac = process.platform === 'darwin'
+  
   const contextMenu = Menu.buildFromTemplate([
     {
       label: isTimerRunning ? '暂停' : '开始',
@@ -807,7 +830,13 @@ function updateTrayMenu() {
     {
       label: '主界面',
       click: () => {
-        mainWindow.show()
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) {
+            mainWindow.restore()
+          }
+          mainWindow.show()
+          mainWindow.focus()
+        }
       }
     },
     {

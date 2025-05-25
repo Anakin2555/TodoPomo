@@ -4,7 +4,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "concurrently \"vite\" \"ping 127.0.0.1 -n 3 >nul && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build && electron-builder",
+    "electron:build": "cnpm run build && electron-builder --mac",
     "postinstall": "electron-builder install-app-deps",
     "electron-dev": "cross-env NODE_ENV=development electron .",
     "dev": "vite",
@@ -23,7 +23,8 @@
       "output": "app_client"
     },
     "mac": {
-      "category": "public.app-category.music",
+      "appId": "com.anakin.todo-pomo",
+      "category": "public.app-category.productivity",
       "icon": "build/icon.icns",
       "target": [
         {
