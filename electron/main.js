@@ -1,5 +1,5 @@
 const { app, BrowserWindow, powerMonitor, ipcMain, screen, Tray, Menu, Notification, nativeImage } = require('electron')
-// const { GlobalKeyboardListener } = require('node-global-key-listener')
+const { GlobalKeyboardListener } = require('node-global-key-listener')
 const robot = require('robotjs')
 const path = require("path")
 const Store = require('electron-store')
@@ -36,6 +36,9 @@ let isIdle = false
 let reminderWindows = []
 let reminderTimer=null
 let isTimerRunning = true
+
+const keyboard = new GlobalKeyboardListener()
+
 
 // 获取应用锁
 const gotTheLock = app.requestSingleInstanceLock()
@@ -246,11 +249,11 @@ function createReminderWindow(text, duration) {
       height: bounds.height,
       x: bounds.x,
       y: bounds.y,
-      frame: false,
+      frame: true,
       autoHideMenuBar: false,
       transparent: true,
       alwaysOnTop: false,
-      skipTaskbar: true,
+      skipTaskbar: false,
       resizable: true,  // 禁止调整窗口大小
       movable: true,    // 禁止移动窗口
       fullscreenable: false,
@@ -440,7 +443,6 @@ function updateLastActivity() {
 function setupActivityMonitoring() {
   try {
     // // 创建全局键盘监听器
-    const keyboard = new GlobalKeyboardListener()
     
     // 监听键盘事件
     keyboard.addListener(function(e) {
@@ -475,14 +477,17 @@ function createTray() {
   const isMac = process.platform === 'darwin'
   
   if (isMac) {
-    // 使用 nativeImage 创建合适大小的图标
+    // 创建原始图标
     const icon = nativeImage.createFromPath(path.join(__dirname, 'assets/icon.png'))
+    
+    // 调整图标大小为16x16
     const trayIcon = icon.resize({
       width: 16,
       height: 16,
       quality: 'best'
     })
-    // 设置为模板图片
+    
+    // 设置为模板图片（macOS要求）
     trayIcon.setTemplateImage(true)
     
     tray = new Tray(trayIcon)
