@@ -222,18 +222,20 @@ const startTimer = () => {
 }
 
 // 暂停计时器
-const pauseTimer = () => {
+const pauseTimer = (needCleanupActive = true) => {
   clearInterval(timer.value)
   isRunning.value = false
 
   // 通知主进程状态变化
-  window.electronAPI.updateTimerStatus(false)
+  window.electronAPI.updateTimerStatus(false,needCleanupActive)
+  
 }
 
 // 重置计时器
 const resetTimer = async (isIdle = false) => {
 
-  pauseTimer()
+  // 空闲导致的重置计时器则不清理活动监听
+  pauseTimer(false)
   console.log('resetTimer:isIdle', isIdle)
 
   // 先保存当前的专注记录
@@ -259,6 +261,8 @@ const handleTimerComplete = async () => {
 // ======================================================================
 // 休息提醒功能
 // ======================================================================
+
+
 // 发送休息提醒
 const notifyBreak = (breakType) => {
   // 播放提示音
@@ -268,7 +272,7 @@ const notifyBreak = (breakType) => {
   
   // 使用 window.electronAPI 发送消息
   window.electronAPI.showBreakReminder({
-    text: '闭上眼睛休息一会吧',
+    text: '',
     duration: duration,
     breakType: breakType
   })

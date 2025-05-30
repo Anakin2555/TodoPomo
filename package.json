@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "main": "electron/main.js",
   "scripts": {
-    "start": "concurrently \"vite\" \"ping 127.0.0.1 -n 3 >nul && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "cnpm run build && electron-builder --mac",
+    "start": "concurrently \"vite\" \"node scripts/wait-dev.js && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && electron-builder --mac",
     "postinstall": "electron-builder install-app-deps",
     "electron-dev": "cross-env NODE_ENV=development electron .",
     "dev": "vite",
@@ -30,13 +30,15 @@
         {
           "target": "dmg",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         }
       ]
@@ -65,9 +67,11 @@
     "@nut-tree/nut-js": "^3.1.1",
     "active-win": "^8.2.1",
     "deasync": "^0.1.30",
+    "electron": "^36.3.2",
     "electron-store": "^4.0.0",
     "node-global-key-listener": "^0.3.0",
     "robotjs": "^0.6.0",
+    "sudo-prompt": "^9.2.1",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

@@ -37,8 +37,11 @@ let reminderWindows = []
 let reminderTimer=null
 let isTimerRunning = true
 
+// 监听键盘事件
 const keyboard = new GlobalKeyboardListener()
-
+keyboard.addListener(function(e) {
+  updateLastActivity()
+})
 
 // 获取应用锁
 const gotTheLock = app.requestSingleInstanceLock()
@@ -180,10 +183,12 @@ app.whenReady().then(() => {
   })
   
   createTray()
+
 })
 
 // 创建主窗口
 function createWindow() {
+  console.log('Creating main window...');
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -192,19 +197,28 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false
-    }
+      backgroundThrottling: false,
+    },
+    enableLargerThanScreen: true,
+    backgroundColor: '#2e2c29'  // 设置背景色，减少白屏闪烁
   })
 
   // 根据环境动态设置加载URL
   if (process.env.NODE_ENV === 'development') {
     // 开发模式
-    mainWindow.loadURL("http://localhost:3002")
+    console.log('Loading development URL: http://localhost:3002');
+    mainWindow.loadURL("http://localhost:3002").catch(err => {
+      console.error('Failed to load URL:', err);
+    });
     // 可选：自动打开开发者工具
-    // mainWindow.webContents.openDevTools()
+    mainWindow.webContents.openDevTools()
   } else {
     // 生产模式
-    mainWindow.loadURL(`file://${path.join(__dirname, "../dist/index.html")}`)
+    const prodPath = `file://${path.join(__dirname, "../dist/index.html")}`;
+    console.log('Loading production path:', prodPath);
+    mainWindow.loadURL(prodPath).catch(err => {
+      console.error('Failed to load file:', err);
+    });
   }
   
   // 处理窗口关闭事件
@@ -215,7 +229,7 @@ function createWindow() {
     }
   })
 
-
+  console.log('Setting up window event handlers...');
   // 创建菜单并传入参数
   createMenu(mainWindow, {
     getAutoLaunchStatus: () => {
@@ -241,37 +255,34 @@ function createReminderWindow(text, duration) {
 
   // 在每个显示器上创建提醒窗口
   displays.forEach((display) => {
-    const { bounds } = display
+    // const { bounds } = display
     
     // 创建窗口，位置和大小与显示器匹配
     const reminderWindow = new BrowserWindow({
-      width: bounds.width,
-      height: bounds.height,
-      x: bounds.x,
-      y: bounds.y,
-      frame: true,
-      autoHideMenuBar: false,
-      transparent: true,
-      alwaysOnTop: false,
-      skipTaskbar: false,
-      resizable: true,  // 禁止调整窗口大小
-      movable: true,    // 禁止移动窗口
-      fullscreenable: false,
-      kiosk: false,       // 启用kiosk模式，可以帮助禁用某些系统快捷键
+      width: 1200,
+      height: 800,
+      backgroundColor: '#00F2EA', // 设置主题色
+      titleBarStyle: 'customButtonsOnHover', // macOS 特定的标题栏样式
+      // autoHideMenuBar: false,
+      // transparent: true,
+      // alwaysOnTop: false,
+      // skipTaskbar: false,
+      // resizable: true,  // 禁止调整窗口大小
+      // movable: true,    // 禁止移动窗口
+      // fullscreenable: false,
+      // kiosk: false,       // 启用kiosk模式，可以帮助禁用某些系统快捷键
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
-        devTools: false  // 禁用开发者工具
+        // devTools: false  // 禁用开发者工具
       }
     })
 
-    
-    
     // 加载提醒页面
     reminderWindow.loadFile(path.join(__dirname, 'reminder.html'))
 
-    // 设置窗口为全屏
-    reminderWindow.setFullScreen(false)
+    // // 设置窗口为全屏
+    // reminderWindow.setFullScreen(false)
     
     // 禁用窗口的最大化、最小化和关闭按钮
     // reminderWindow.setMinimizable(false)
@@ -428,27 +439,20 @@ function checkUserActivity() {
 
 // 更新最后活动时间
 function updateLastActivity() {
-  const previousState = isIdle
-  lastActivityTime = Date.now()
-  isIdle = false
-  
   // 如果状态从idle变为active，通知渲染进程
-  if (previousState) {
+  if (isIdle) {
     console.log('检测到活动，从idle状态恢复')
     mainWindow?.webContents.send('system-idle', false)
   }
+
+  lastActivityTime = Date.now()
+  isIdle = false
 }
 
 // 设置活动监控
 function setupActivityMonitoring() {
   try {
     // // 创建全局键盘监听器
-    
-    // 监听键盘事件
-    keyboard.addListener(function(e) {
-      updateLastActivity()
-      
-    })
 
     // 初始化最后鼠标位置
     lastMousePosition = robot.getMousePos()
@@ -717,7 +721,7 @@ ipcMain.on('show-notification', (event, options) => {
     body: options.body || '',
     silent: false,
     appId: 'TodoPomo',
-    icon: path.join(__dirname, 'assets/icon.png')
+    // icon: path.join(__dirname, 'assets/icon.png')
   })
 
   // 添加点击事件处理
@@ -738,12 +742,15 @@ ipcMain.on('show-notification', (event, options) => {
 })
 
 // 监听渲染进程发来的状态更新
-ipcMain.on('update-timer-status', (_, running) => {
+ipcMain.on('update-timer-status', (_, running,needCleanupActive) => {
   isTimerRunning = running
   // console.log(isTimerRunning)
   if(!isTimerRunning){
     tray.setToolTip(`已暂停`)
-    cleanupActivityMonitoring()
+    // 空闲导致的重置计时器则不清理活动监听
+    if(needCleanupActive){
+      cleanupActivityMonitoring()
+    }
   }else{
     tray.setToolTip(`运行中`)
     setupActivityMonitoring()
