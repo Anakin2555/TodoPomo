@@ -177,7 +177,7 @@ const startNewTask = (task) => {
 const ControlTimer = () => {
   if (isRunning.value && !isPause.value) {
     isPause.value = true
-    pauseTimer()
+    pauseTimer(true)
     resetTimer()
   } else {
     startTimer()
@@ -210,7 +210,7 @@ const startTimer = () => {
           if (timePassed - lastBreakTime.value >= SHORT_BREAK_INTERVAL.value) {
             lastBreakTime.value = timePassed
             notifyBreak('short')
-            pauseTimer()
+            pauseTimer(true)
           }
         }
       } else {
@@ -222,18 +222,20 @@ const startTimer = () => {
 }
 
 // 暂停计时器
-const pauseTimer = () => {
+const pauseTimer = (needCleanupActivity = true) => {
   clearInterval(timer.value)
   isRunning.value = false
 
-  // 通知主进程状态变化
-  window.electronAPI.updateTimerStatus(false)
+  // 通知主进程状态变化,用户手动暂停才更新状态
+  window.electronAPI.updateTimerStatus(false, needCleanupActivity)
+  
 }
 
 // 重置计时器
 const resetTimer = async (isIdle = false) => {
 
-  pauseTimer()
+  // 空闲导致的重置计时器则不清理用户动作监控
+  pauseTimer(false)
   console.log('resetTimer:isIdle', isIdle)
 
   // 先保存当前的专注记录

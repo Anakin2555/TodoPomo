@@ -410,7 +410,7 @@ function checkUserActivity() {
     }
     
     // 如果超过5分钟无活动且之前不是idle状态
-    if (idleTime > 5 * 60 * 1000) {
+    if (idleTime > 1 * 60 * 1000) {
       isIdle = true
       lastActivityTime = Date.now() // 防止idle后一直发送消息
       console.log('5分钟无活动进入idle状态')
@@ -712,14 +712,19 @@ ipcMain.on('show-notification', (event, options) => {
 })
 
 // 监听渲染进程发来的状态更新
-ipcMain.on('update-timer-status', (_, running) => {
+ipcMain.on('update-timer-status', (_, running,needCleanupActivity) => {
   isTimerRunning = running
   // console.log(isTimerRunning)
   if(!isTimerRunning){
     tray.setToolTip(`已暂停`)
-    cleanupActivityMonitoring()
+    console.log('tooltip已设为已暂停')
+    // 空闲导致的暂停计时器则不清理用户动作监控
+    if(needCleanupActivity){
+      cleanupActivityMonitoring()
+    }
   }else{
     tray.setToolTip(`运行中`)
+    console.log('tooltip已设为运行中')
     setupActivityMonitoring()
   }
   updateTrayMenu()

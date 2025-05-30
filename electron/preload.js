@@ -34,8 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   showNotification: (options) => ipcRenderer.send('show-notification', options),
 
-  updateTimerStatus: (status) => {
-    ipcRenderer.send('update-timer-status', status)
+  updateTimerStatus: (status, needCleanupActivity) => {
+    ipcRenderer.send('update-timer-status', status, needCleanupActivity)
   },
   onToggleTimer: (callback) => {
     ipcRenderer.on('toggle-timer', () => callback())
