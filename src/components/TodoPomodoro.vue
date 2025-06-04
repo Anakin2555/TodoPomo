@@ -62,6 +62,8 @@ const noTaskCounter = ref(0)
 const showTaskEditModal = ref(false)
 const editingTask = ref(null)
 
+const isComposing = ref(false)
+
 // ======================================================================
 // 计算属性
 // ======================================================================
@@ -583,6 +585,24 @@ const handleTaskDelete = async (taskId) => {
 const FocusHistoryModal = defineAsyncComponent(() => 
   import('./FocusHistoryModal.vue')
 )
+
+const onCompositionStart = () => {
+  isComposing.value = true
+  // console.log('onCompositionStart', isComposing.value)
+}
+
+const onCompositionEnd = () => {
+  setTimeout(() => {
+    isComposing.value = false
+    // console.log('onCompositionEnd', isComposing.value)
+  }, 300)
+}
+
+const handleEnterPress = (e) => {
+  if (!isComposing.value) {
+    addTask()
+  }
+}
 </script>
 
 <template>
@@ -686,8 +706,10 @@ const FocusHistoryModal = defineAsyncComponent(() =>
         <div class="todo-input">
           <input 
             v-model="newTask.text" 
-            @keyup.enter="addTask"
-            placeholder="Add new task..."
+            @keyup.enter="handleEnterPress"
+            @compositionstart="onCompositionStart"
+            @compositionend="onCompositionEnd"
+            placeholder="Add new task"
           >
           <!-- 预设时间段调整 -->
           <div class="segment-adjust" v-show="newTask.text.trim() !== ''">
@@ -819,6 +841,7 @@ const FocusHistoryModal = defineAsyncComponent(() =>
     <TaskEditModal
       :is-visible="showTaskEditModal"
       :task="editingTask"
+      :focus-time="FOCUS_TIME/60"
       @close="showTaskEditModal = false"
       @update="handleTaskUpdate"
       @delete="handleTaskDelete"
