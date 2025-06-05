@@ -112,7 +112,7 @@ const addTask = async () => {
 // 更新任务
 const updateTask = async (task,isIdle = false) => {
   if (!task) return
-  console.log({...task})
+  console.log('updatedTask', {...task})
 
   // 如果是因为idle触发保存，则结束时间减去5分钟idle时间
   if(isIdle){
@@ -817,6 +817,7 @@ const FocusHistoryModal = defineAsyncComponent(() =>
     <TaskEditModal
       :is-visible="showTaskEditModal"
       :task="editingTask"
+      :focusTime="FOCUS_TIME/60"
       @close="showTaskEditModal = false"
       @update="handleTaskUpdate"
       @delete="handleTaskDelete"

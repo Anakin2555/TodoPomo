@@ -1,6 +1,6 @@
 {
   "name": "todo-pomo",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "main": "electron/main.js",
   "scripts": {
     "start": "concurrently \"vite\" \"ping 127.0.0.1 -n 3 >nul && cross-env NODE_ENV=development electron .\"",

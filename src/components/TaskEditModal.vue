@@ -10,7 +10,7 @@ const props = defineProps({
     type: Object,
     default: null
   },
-  focusTime: {
+  focusTime: {       
     type: Number,
     default: 40
   }

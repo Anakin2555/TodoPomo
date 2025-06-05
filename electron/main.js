@@ -410,7 +410,7 @@ function checkUserActivity() {
     }
     
     // 如果超过5分钟无活动且之前不是idle状态
-    if (idleTime > 1 * 60 * 1000) {
+    if (idleTime > 5 * 60 * 1000) {
       isIdle = true
       lastActivityTime = Date.now() // 防止idle后一直发送消息
       console.log('5分钟无活动进入idle状态')
