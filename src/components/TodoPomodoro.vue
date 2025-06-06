@@ -500,7 +500,8 @@ onMounted(async () => {
   window.electronAPI.onFocusDurationChanged((value) => {
     FOCUS_TIME.value = value * 60
     resetTimer()
-    startTimer()
+    window.electronAPI.setIdleStatus(true)
+    //startTimer()
   })
   
   window.electronAPI.onShortBreakDurationChanged((value) => {

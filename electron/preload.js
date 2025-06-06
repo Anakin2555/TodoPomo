@@ -10,7 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateTray: (data) => ipcRenderer.send('update-tray', data),
   addFocusRecord: (record) => ipcRenderer.invoke('add-focus-record', record),
   loadFocusHistory: (date) => ipcRenderer.invoke('load-focus-history',date),
-  loadMonthRecords: (year, month) => ipcRenderer.invoke('load-month-records', year, month),
+  loadMonthRecords: (year, month) => ipcRenderer.invoke('load-month-records', year, month), 
+  setIdleStatus: (status) => ipcRenderer.invoke('set-idle-status', status),
   onSystemIdle: (callback) => {
     ipcRenderer.on('system-idle', callback)
   },

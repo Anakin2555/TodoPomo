@@ -32,7 +32,7 @@ let tray = null
 let lastActivityTime = Date.now()
 let lastMousePosition = robot.getMousePos()
 let activityCheckInterval
-let isIdle = false
+let isIdle = true
 let reminderWindows = []
 let reminderTimer=null
 let isTimerRunning = true
@@ -374,7 +374,7 @@ function createReminderWindow(text, duration) {
   
 }
 
-// 检查用户活动
+// 检查用户鼠标活动
 function checkUserActivity() {
   try {
     // 获取当前鼠标位置
@@ -618,7 +618,9 @@ ipcMain.handle('load-tasks', () => {
 //   }
 //   return time;
 // })
-
+ipcMain.handle('set-idle-status', (event, status) => {
+  isIdle = status
+})
 ipcMain.handle('load-total-focus-time', (event, date) => {
   const record = getSomeDayRecord(date)
   // console.log(todayRecord)
