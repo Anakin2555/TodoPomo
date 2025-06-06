@@ -226,8 +226,9 @@ function createWindow() {
       return app.getLoginItemSettings().openAtLogin
     }
   })
-
-  setupActivityMonitoring()
+  setTimeout(() => {
+    setupActivityMonitoring()
+  }, 3000)
 }
 
 // 创建提醒窗口的函数 - 支持多屏幕
