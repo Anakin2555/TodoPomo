@@ -5,9 +5,9 @@
   <title>Reminder</title>
   <style>
     :root {
-      --primary-color: #04decffb;
-      --bg-primary: var(--primary-color);
-      --text-primary: #03352f;
+      --primary-color: #00F2EA;
+      --bg-primary: rgb(0, 0, 0);
+      --text-primary: #FFFFFF;
       --text-secondary: rgba(255, 255, 255, 0.7);
     }
 
@@ -27,62 +27,57 @@
     }
 
     .reminder-content {
-      width: 400px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 20px;
+      text-align: center;
       padding: 48px;
-      background-color: rgba(69, 237, 206, 0);
+      background-color: rgba(69, 237, 206, 0.95);
       border-radius: 24px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
       transform: translateY(0);
       animation: slideUp 0.5s ease-out;
-      border: 1px solid rgba(255, 255, 255, 0);
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .reminder-icon {
       width: 64px;
       height: 64px;
+      margin-bottom: 24px;
       animation: pulse 2s infinite;
     }
 
     .reminder-text {
-      width: 100%;
-      text-align: center;
       font-size: 28px;
       font-weight: 600;
+      margin-bottom: 16px;
       color: var(--text-primary);
     }
 
-    /* .reminder-subtext {
+    .reminder-subtext {
       font-size: 16px;
       color: var(--text-secondary);
       margin-bottom: 32px;
-    } */
+    }
 
     .reminder-timer {
-      /* margin-top: 12px; */
-      font-size: 24px;
+      font-size: 48px;
       font-weight: 700;
-      color: var(--text-primary);
+      color: var(--primary-color);
+      margin-bottom: 24px;
       font-variant-numeric: tabular-nums;
-      animation: breathe 5s ease-in-out infinite;
     }
 
     .progress-bar {
       width: 100%;
-      height: 8px;
-      background-color: rgba(255, 255, 255, 0.3);
-      border-radius: 20px;
+      height: 4px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
       overflow: hidden;
+      margin-top: 32px;
     }
 
     .progress-fill {
       height: 100%;
-      background-color: var(--text-primary);
-      border-radius: 20px;
+      background-color: var(--primary-color);
+      border-radius: 2px;
       transition: width 1s linear;
     }
 
@@ -114,18 +109,6 @@
       }
     }
 
-    @keyframes breathe {
-      0% {
-        opacity: 0;
-      }
-      50% {
-        opacity: 1;
-      }
-      100% {
-        opacity: 0;
-      }
-    }
-
     .error-message {
       color: red;
       margin-top: 10px;
@@ -140,22 +123,18 @@
 </head>
 <body>
   <div class="reminder-content">
-    <!-- <svg class="reminder-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="var(--text-primary)" stroke-width="2"/>
-      <path d="M12 6V12L16 14" stroke="var(--text-primary)" stroke-width="2" stroke-linecap="round"/>
-    </svg> -->
-    <div class="reminder-icon">
-      <img src="assets/icons8-sparkling-100.png" width="64" height="64" alt="Reminder Icon" class="reminder-icon-img">
-    </div>
+    <svg class="reminder-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="var(--primary-color)" stroke-width="2"/>
+      <path d="M12 6V12L16 14" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+    </svg>
     <div class="reminder-text" id="reminderText"></div>
-    <!-- <div class="reminder-subtext">休息一下，让身心放松</div> -->
-    <div class="progress-bar">
-      <div class="progress-fill" id="progressFill"></div>
-    </div>
+    <div class="reminder-subtext">休息一下，让身心放松</div>
     <div class="reminder-timer">
       <span id="timer"></span>
     </div>
-    
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
 
     <div id="audio-status" class="error-message"></div>
 
@@ -164,51 +143,6 @@
 
   <script>
     const { ipcRenderer } = require('electron');
-          
-    const breakTips = [
-      {
-        text: '闭上眼睛休息一会吧',
-        icon: 'assets/icons8-捂眼睛.png'
-      },
-      {
-        text: '看10米以外的物体，让眼睛放松',
-        icon: 'assets/icons8-戴单片眼镜的脸-94.png'
-      },
-      {
-        text: '看向窗外，让眼睛放松',
-        icon: 'assets/icons8-树木-94.png'
-      },
-      {
-        text: '起身活动一下身体',
-        icon: 'assets/icons8-婴孩脚印-94.png'
-      },
-      {
-        text: '做做颈部和肩部拉伸',
-        icon: 'assets/icons8-sparkling-100.png'
-      },
-      {
-        text: '站起来走动走动',
-        icon: 'assets/icons8-婴孩脚印-94.png'
-      },
-      {
-        text: '深呼吸，放松心情',
-        icon: 'assets/icons8-sparkling-100.png'
-      },
-      {
-        text: '喝点水，补充水分',
-        icon: 'assets/icons8-杯子-94.png'
-      }
-    ]
-
-    function getRandomTip() {
-      return breakTips[Math.floor(Math.random() * breakTips.length)]
-    }
-    
-    function updateReminder() {
-      const tip = getRandomTip();
-      document.getElementById('reminderText').textContent = tip.text;
-      document.querySelector('.reminder-icon-img').src = tip.icon;
-    }
     
     ipcRenderer.on('reminder-data', async (event, data) => {
       try {
@@ -230,11 +164,7 @@
         
 
         // 显示提醒内容
-        if(data.text===''){
-          updateReminder();
-        }else{
-          document.getElementById('reminderText').textContent = data.text;
-        }
+        document.getElementById('reminderText').textContent = data.text;
 
         await startAudio.play();
 
