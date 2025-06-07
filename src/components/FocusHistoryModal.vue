@@ -4,9 +4,6 @@ import { ref, onMounted, computed } from 'vue'
 // ======================================================================
 // Props 和 Emits
 // ======================================================================
-const props = defineProps({
-  isVisible: Boolean
-})
 
 const emit = defineEmits(['close'])
 
@@ -185,7 +182,7 @@ onMounted(async () => {
 
 
 <template>
-  <div v-if="isVisible" class="modal-overlay" @click.self="handleClose">
+  <div class="modal-overlay" @click.self="handleClose">
     <div class="modal-content">
       <!-- 模态框标题 -->
       <header class="modal-header">

@@ -7,6 +7,7 @@ import IconEnd from './icons/IconEnd.vue'
 import IconEdit from './icons/IconEdit.vue'
 import FocusHistory from './FocusHistory.vue'
 import TaskEditModal from './TaskEditModal.vue'
+import ImportTaskModal from './ImportTaskModal.vue'
 
 // ======================================================================
 // 配置和常量
@@ -61,6 +62,9 @@ const noTaskCounter = ref(0)
 // 添加状态管理
 const showTaskEditModal = ref(false)
 const editingTask = ref(null)
+
+// 在 data 部分添加
+const showImportModal = ref(false)
 
 // ======================================================================
 // 计算属性
@@ -261,6 +265,8 @@ const handleTimerComplete = async () => {
 // ======================================================================
 // 休息提醒功能
 // ======================================================================
+
+
 // 发送休息提醒
 const notifyBreak = (breakType) => {
   // 播放提示音
@@ -270,7 +276,7 @@ const notifyBreak = (breakType) => {
   
   // 使用 window.electronAPI 发送消息
   window.electronAPI.showBreakReminder({
-    text: '闭上眼睛休息一会吧',
+    text: '',
     duration: duration,
     breakType: breakType
   })
@@ -574,14 +580,39 @@ const handleTaskDelete = async (taskId) => {
   if (currentTask.value?.id === taskId) {
     currentTask.value = null
   }
- 
-  
 }
 
 // 修改后：使用动态导入
 const FocusHistoryModal = defineAsyncComponent(() => 
   import('./FocusHistoryModal.vue')
 )
+
+// 处理导入任务
+const handleImportTasks = async (tasksToImport) => {
+  // 过滤掉已存在相同标题的任务
+  const uniqueTasks = tasksToImport.filter(newTask => 
+    !tasks.value.some(existingTask => existingTask.text === newTask.text.trim())
+  );
+
+  // 如果所有任务都是重复的
+  if (uniqueTasks.length === 0) {
+    showTip('所选的任务都已存在，未添加任何任务', 'error');
+    return;
+  }
+
+  // 添加非重复的任务
+  for (const task of uniqueTasks) {
+    await window.electronAPI.addTask(task);
+    tasks.value.unshift(task);
+  }
+
+  // 显示导入结果
+  if (uniqueTasks.length === tasksToImport.length) {
+    showTip(`成功导入 ${uniqueTasks.length} 个任务`, 'success');
+  } else {
+    showTip(`成功导入 ${uniqueTasks.length} 个任务，${tasksToImport.length - uniqueTasks.length} 个任务已存在`, 'success');
+  }
+}
 </script>
 
 <template>
@@ -655,7 +686,6 @@ const FocusHistoryModal = defineAsyncComponent(() =>
             </div>
           </div>
 
-          
         </div>
       </div>
 
@@ -679,7 +709,12 @@ const FocusHistoryModal = defineAsyncComponent(() =>
       <!-- Todo列表容器 -->
       <div class="todo-section">
         <div class="section-header">
-          <h2>Todo List</h2>
+          <div class="header-content">
+            <h2>Todo List</h2>
+            <button class="import-button" @click="showImportModal = true">
+              Import
+            </button>
+          </div>
         </div>
         <!-- 添加任务 -->
         <div class="todo-input">
@@ -782,7 +817,7 @@ const FocusHistoryModal = defineAsyncComponent(() =>
           <div class="stat-item">
             <div class="stat-item-left">
               <div class="stat-label">Today Focus Time</div>
-              <div class="stat-label-highlight" @click="showFocusHistory">Focus History</div>
+              <button class="history-button" @click="showFocusHistory">Focus History</button>
             </div>
             <div class="stat-value">
               {{ formatHoursMinutes(totalFocusTime) }}
@@ -806,7 +841,6 @@ const FocusHistoryModal = defineAsyncComponent(() =>
     <Suspense>
       <FocusHistoryModal 
         v-if="showHistoryModal"
-        :is-visible="showHistoryModal"
         @close="showHistoryModal = false"
       />
       <template #fallback>
@@ -822,6 +856,13 @@ const FocusHistoryModal = defineAsyncComponent(() =>
       @close="showTaskEditModal = false"
       @update="handleTaskUpdate"
       @delete="handleTaskDelete"
+    />
+
+    <!-- 添加导入弹窗组件 -->
+    <ImportTaskModal 
+      v-if="showImportModal"
+      @close="showImportModal = false"
+      @import="handleImportTasks"
     />
 
   </div>
@@ -1057,12 +1098,19 @@ button {
   color: #888;
   margin-bottom: 5px;
 }
-.stat-label-highlight{
-  font-size: 14px;
+.history-button {
+  background-color: transparent;
   color: var(--primary-color);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
-
+.history-button:hover {
+  background-color: var(--primary-color);
+  color: black;
+}
 .stat-value {
   font-size: 16px;
   margin-bottom: 5px;
@@ -1448,6 +1496,27 @@ button:hover:not(:disabled) {
 .completed-task .focus-button {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.import-button {
+  background-color: transparent;
+  color: var(--primary-color);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.import-button:hover {
+  background-color: var(--primary-color);
+  color: black;
 }
 
 </style> 
