@@ -707,6 +707,13 @@ ipcMain.handle('load-month-records', (event, year, month) => {
   return datesWithRecords
 })
 
+// 获取指定日期的任务
+ipcMain.handle('load-tasks-by-date', (event, date) => {
+  const record = getSomeDayRecord(date)
+  console.log('load-tasks-by-date',record)
+  return record.tasks
+})
+
 // 添加 IPC 处理程序
 ipcMain.on('show-notification', (event, options) => {
   console.log('show-notification', options)
