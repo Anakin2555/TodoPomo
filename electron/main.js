@@ -36,6 +36,7 @@ let isIdle = true
 let reminderWindows = []
 let reminderTimer=null
 let isTimerRunning = true
+let isFirstCheck = true
 
 // 获取应用锁
 const gotTheLock = app.requestSingleInstanceLock()
@@ -228,7 +229,7 @@ function createWindow() {
   })
   setTimeout(() => {
     setupActivityMonitoring()
-  }, 3000)
+  }, 2000)
 }
 
 // 创建提醒窗口的函数 - 支持多屏幕
@@ -379,18 +380,28 @@ function createReminderWindow(text, duration) {
 function checkUserActivity() {
   try {
     // 获取当前鼠标位置
-    const currentMousePos = robot.getMousePos()
+    const currentMousePos = robot.getMousePos()   
+    
+    // 如果是首次检查，只记录位置，不判断移动
+    if(isFirstCheck){
+      lastMousePosition = currentMousePos
+      lastActivityTime = Date.now()
+      isFirstCheck = false
+      return
+    }
+    
     // 检查鼠标是否移动
     const hasMouseMoved = 
-      currentMousePos.x !== lastMousePosition.x || 
-      currentMousePos.y !== lastMousePosition.y
+      Math.abs(currentMousePos.x - lastMousePosition.x) > 3 || 
+      Math.abs(currentMousePos.y - lastMousePosition.y) > 3  // 添加阈值，避免微小抖动
     
+    console.log('hasMouseMoved',hasMouseMoved)
+
     // 更新最后鼠标位置
     lastMousePosition = currentMousePos
     
     const currentTime = Date.now()
     const idleTime = currentTime - lastActivityTime
-    // console.log('idleTime',idleTime)
     
     // 如果检测到活动，更新时间
     if (hasMouseMoved) {
@@ -432,7 +443,7 @@ function updateLastActivity() {
   
   // 如果状态从idle变为active，通知渲染进程
   if (previousState) {
-    console.log('检测到活动，从idle状态恢复')
+    console.log('从idle状态恢复，当前时间:', new Date().toLocaleTimeString())
     mainWindow?.webContents.send('system-idle', false)
   }
 }
@@ -440,11 +451,20 @@ function updateLastActivity() {
 // 设置活动监控
 function setupActivityMonitoring() {
   try {
-    // // 创建全局键盘监听器
+    // 未解锁时不进行活动监控
+    if(powerMonitor.getSystemIdleState(1) === 'locked'){
+      console.log('系统被锁定，不进行活动监控')
+      return
+    }
+
+    isFirstCheck = true
+
+    // 创建全局键盘监听器
     const keyboard = new GlobalKeyboardListener()
     
     // 监听键盘事件
     keyboard.addListener(function(e) {
+      console.log('keyboard activity detected！')
       updateLastActivity()
       
     })
@@ -453,9 +473,9 @@ function setupActivityMonitoring() {
     lastMousePosition = robot.getMousePos()
     lastActivityTime = Date.now()
     
-    // 设置检查间隔（每十秒检查一次）
+    // 设置检查间隔（建议改为更短的间隔，比如5秒）
     cleanupActivityMonitoring()
-    activityCheckInterval = setInterval(checkUserActivity, 10000)
+    activityCheckInterval = setInterval(checkUserActivity, 5000)
     console.log('setup activity monitoring')
     
   } catch (error) {
@@ -621,6 +641,7 @@ ipcMain.handle('load-tasks', () => {
 // })
 ipcMain.handle('set-idle-status', (event, status) => {
   isIdle = status
+  console.log('set-idle-status',status)
 })
 ipcMain.handle('load-total-focus-time', (event, date) => {
   const record = getSomeDayRecord(date)
