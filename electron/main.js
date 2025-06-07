@@ -91,53 +91,10 @@ app.whenReady().then(() => {
     createWindow()
   }
 
-  // // 监听屏幕解锁事件
-  // powerMonitor.on('unlock-screen', () => {
-  //   console.log('屏幕亮屏')
+  // 监听屏幕解锁事件
+  powerMonitor.on('unlock-screen', () => {
+    console.log('屏幕亮屏')
 
-  //   // 恢复活动监控
-  //   setupActivityMonitoring()
-
-  //   setTimeout(() => {
-  //     // 暂停番茄钟计时器
-  //     isIdle = true
-  //     mainWindow?.webContents.send('system-idle', true)
-  //     console.log('系统唤醒重置计时器')
-  //   }, 2000)
-  // })
-
-  // // 监听屏幕锁定事件
-  // powerMonitor.on('lock-screen', () => {
-  //   console.log('屏幕息屏')
-
-  //   // 关闭提醒窗口，息屏时不能关闭，否则有漏洞跳过休息
-  //   // if (reminderTimer) {
-  //   //   clearTimeout(reminderTimer)
-  //   //   reminderTimer = null
-  //   // }
-
-  //   // if (reminderWindows.length > 0) {
-  //   //   reminderWindows.forEach(window => {
-  //   //     if (!window.isDestroyed()) {
-  //   //       window.close()
-  //   //     }
-  //   //   })
-  //   // }
-    
-  //   // 例如：暂停番茄钟计时器
-  //   isIdle = true
-  //   mainWindow?.webContents.send('system-idle', true)
-  //   console.log('息屏发送idle信号')
-
-  //   // 停止活动监控
-  //   cleanupActivityMonitoring()
-
-  // })
-
-  // 监听系统唤醒事件
-  powerMonitor.on('resume', () => {
-    console.log('系统唤醒')
-    
     // 恢复活动监控
     setupActivityMonitoring()
 
@@ -146,14 +103,14 @@ app.whenReady().then(() => {
       isIdle = true
       mainWindow?.webContents.send('system-idle', true)
       console.log('系统唤醒重置计时器')
-    }, 3000)
+    }, 2000)
   })
 
-  // 监听系统睡眠事件
-  powerMonitor.on('suspend', () => {
-    console.log('系统睡眠')
-    
-    // // 关闭提醒窗口
+  // 监听屏幕锁定事件
+  powerMonitor.on('lock-screen', () => {
+    console.log('屏幕息屏')
+
+    // 关闭提醒窗口，息屏时不能关闭，否则有漏洞跳过休息
     // if (reminderTimer) {
     //   clearTimeout(reminderTimer)
     //   reminderTimer = null
@@ -166,16 +123,59 @@ app.whenReady().then(() => {
     //     }
     //   })
     // }
-
+    
+    // 例如：暂停番茄钟计时器
     isIdle = true
     mainWindow?.webContents.send('system-idle', true)
-    console.log('睡眠发送idle信号')
-    
-    
+    console.log('息屏发送idle信号')
 
     // 停止活动监控
     cleanupActivityMonitoring()
+
   })
+
+  // // 监听系统唤醒事件
+  // powerMonitor.on('resume', () => {
+  //   console.log('系统唤醒')
+    
+  //   // 恢复活动监控
+  //   setupActivityMonitoring()
+
+  //   setTimeout(() => {
+  //     // 暂停番茄钟计时器
+  //     isIdle = true
+  //     mainWindow?.webContents.send('system-idle', true)
+  //     console.log('系统唤醒重置计时器')
+  //   }, 3000)
+  // })
+
+  // // 监听系统睡眠事件
+  // powerMonitor.on('suspend', () => {
+  //   console.log('系统睡眠')
+    
+  //   // // 关闭提醒窗口
+  //   // if (reminderTimer) {
+  //   //   clearTimeout(reminderTimer)
+  //   //   reminderTimer = null
+  //   // }
+
+  //   // if (reminderWindows.length > 0) {
+  //   //   reminderWindows.forEach(window => {
+  //   //     if (!window.isDestroyed()) {
+  //   //       window.close()
+  //   //     }
+  //   //   })
+  //   // }
+
+  //   isIdle = true
+  //   mainWindow?.webContents.send('system-idle', true)
+  //   console.log('睡眠发送idle信号')
+    
+    
+
+  //   // 停止活动监控
+  //   cleanupActivityMonitoring()
+  // })
   
   createTray()
 })
