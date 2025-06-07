@@ -7,6 +7,7 @@ import IconEnd from './icons/IconEnd.vue'
 import IconEdit from './icons/IconEdit.vue'
 import FocusHistory from './FocusHistory.vue'
 import TaskEditModal from './TaskEditModal.vue'
+import ImportTaskModal from './ImportTaskModal.vue'
 
 // ======================================================================
 // 配置和常量
@@ -63,6 +64,9 @@ const showTaskEditModal = ref(false)
 const editingTask = ref(null)
 
 const isComposing = ref(false)
+
+// 在 data 部分添加
+const showImportModal = ref(false)
 
 // ======================================================================
 // 计算属性
@@ -577,8 +581,6 @@ const handleTaskDelete = async (taskId) => {
   if (currentTask.value?.id === taskId) {
     currentTask.value = null
   }
- 
-  
 }
 
 // 修改后：使用动态导入
@@ -601,6 +603,33 @@ const onCompositionEnd = () => {
 const handleEnterPress = (e) => {
   if (!isComposing.value) {
     addTask()
+  }
+}
+
+// 处理导入任务
+const handleImportTasks = async (tasksToImport) => {
+  // 过滤掉已存在相同标题的任务
+  const uniqueTasks = tasksToImport.filter(newTask => 
+    !tasks.value.some(existingTask => existingTask.text === newTask.text.trim())
+  );
+
+  // 如果所有任务都是重复的
+  if (uniqueTasks.length === 0) {
+    showTip('所选的任务都已存在，未添加任何任务', 'error');
+    return;
+  }
+
+  // 添加非重复的任务
+  for (const task of uniqueTasks) {
+    await window.electronAPI.addTask(task);
+    tasks.value.unshift(task);
+  }
+
+  // 显示导入结果
+  if (uniqueTasks.length === tasksToImport.length) {
+    showTip(`成功导入 ${uniqueTasks.length} 个任务`, 'success');
+  } else {
+    showTip(`成功导入 ${uniqueTasks.length} 个任务，${tasksToImport.length - uniqueTasks.length} 个任务已存在`, 'success');
   }
 }
 </script>
@@ -676,7 +705,6 @@ const handleEnterPress = (e) => {
             </div>
           </div>
 
-          
         </div>
       </div>
 
@@ -700,7 +728,12 @@ const handleEnterPress = (e) => {
       <!-- Todo列表容器 -->
       <div class="todo-section">
         <div class="section-header">
-          <h2>Todo List</h2>
+          <div class="header-content">
+            <h2>Todo List</h2>
+            <button class="import-button" @click="showImportModal = true">
+              Import
+            </button>
+          </div>
         </div>
         <!-- 添加任务 -->
         <div class="todo-input">
@@ -805,7 +838,7 @@ const handleEnterPress = (e) => {
           <div class="stat-item">
             <div class="stat-item-left">
               <div class="stat-label">Today Focus Time</div>
-              <div class="stat-label-highlight" @click="showFocusHistory">Focus History</div>
+              <button class="history-button" @click="showFocusHistory">Focus History</button>
             </div>
             <div class="stat-value">
               {{ formatHoursMinutes(totalFocusTime) }}
@@ -845,6 +878,13 @@ const handleEnterPress = (e) => {
       @close="showTaskEditModal = false"
       @update="handleTaskUpdate"
       @delete="handleTaskDelete"
+    />
+
+    <!-- 添加导入弹窗组件 -->
+    <ImportTaskModal 
+      :is-visible="showImportModal"
+      @close="showImportModal = false"
+      @import="handleImportTasks"
     />
 
   </div>
@@ -1080,12 +1120,19 @@ button {
   color: #888;
   margin-bottom: 5px;
 }
-.stat-label-highlight{
-  font-size: 14px;
+.history-button {
+  background-color: transparent;
   color: var(--primary-color);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
-
+.history-button:hover {
+  background-color: var(--primary-color);
+  color: black;
+}
 .stat-value {
   font-size: 16px;
   margin-bottom: 5px;
@@ -1471,6 +1518,27 @@ button:hover:not(:disabled) {
 .completed-task .focus-button {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.import-button {
+  background-color: transparent;
+  color: var(--primary-color);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.import-button:hover {
+  background-color: var(--primary-color);
+  color: black;
 }
 
 </style> 

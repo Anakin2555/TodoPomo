@@ -685,6 +685,12 @@ ipcMain.handle('add-focus-record', (event, record) => {
   return record
 })
 
+ipcMain.handle('load-tasks-by-date', (event, date) => {
+  const record = getSomeDayRecord(date)
+  console.log('load-tasks-by-date',record)
+  return record.tasks
+})
+
 // 获取历史记录
 ipcMain.handle('load-focus-history', (event, date) => {
   const record = getSomeDayRecord(date)

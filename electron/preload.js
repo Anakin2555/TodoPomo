@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addFocusRecord: (record) => ipcRenderer.invoke('add-focus-record', record),
   loadFocusHistory: (date) => ipcRenderer.invoke('load-focus-history',date),
   loadMonthRecords: (year, month) => ipcRenderer.invoke('load-month-records', year, month),
+  loadTasksByDate: (date) => ipcRenderer.invoke('load-tasks-by-date', date),
   onSystemIdle: (callback) => {
     ipcRenderer.on('system-idle', callback)
   },

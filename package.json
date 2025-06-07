@@ -1,6 +1,6 @@
 {
   "name": "todo-pomo",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "main": "electron/main.js",
   "scripts": {
     "start": "concurrently \"vite\" \"node scripts/wait-dev.js && cross-env NODE_ENV=development electron .\"",
