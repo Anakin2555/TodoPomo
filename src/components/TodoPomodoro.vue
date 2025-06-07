@@ -862,7 +862,6 @@ const handleImportTasks = async (tasksToImport) => {
     <Suspense>
       <FocusHistoryModal 
         v-if="showHistoryModal"
-        :is-visible="showHistoryModal"
         @close="showHistoryModal = false"
       />
       <template #fallback>
@@ -882,7 +881,7 @@ const handleImportTasks = async (tasksToImport) => {
 
     <!-- 添加导入弹窗组件 -->
     <ImportTaskModal 
-      :is-visible="showImportModal"
+      v-if="showImportModal"
       @close="showImportModal = false"
       @import="handleImportTasks"
     />

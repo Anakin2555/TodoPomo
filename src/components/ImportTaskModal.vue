@@ -1,9 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-const props = defineProps({
-  isVisible: Boolean,
-})
 
 const emit = defineEmits(['close', 'import'])
 
@@ -49,7 +46,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="isVisible" class="modal-overlay">
+  <div class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Import Previous Tasks</h3>
