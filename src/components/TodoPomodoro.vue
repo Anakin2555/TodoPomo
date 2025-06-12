@@ -395,6 +395,7 @@ const calculateProgressWidth = (focusTime) => {
 // 监听当前任务变化，保存专注记录
 watch(currentTask, async (newTask, oldTask) => {
   console.log('currentTask', newTask, oldTask)
+  if(newTask.id===oldTask?.id) return
   // if (!hasSaved.value) {
   //   hasSaved.value = true
     updateTask(currentTask.value) // 存储任务时间
@@ -570,6 +571,10 @@ const handleTaskUpdate = async (updatedTask) => {
   if (index !== -1) {
     tasks.value[index] = updatedTask
     await window.electronAPI.updateTask(updatedTask)
+  }
+  // 如果编辑的任务是当前任务，则要重新设定当前任务，否则已选任务是编辑前的任务
+  if(currentTask.value?.id===updatedTask.id) {
+    currentTask.value = updatedTask
   }
 }
 

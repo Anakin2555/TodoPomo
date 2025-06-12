@@ -229,7 +229,7 @@ function createWindow() {
   })
   setTimeout(() => {
     setupActivityMonitoring()
-  }, 2000)
+  }, 5000)
 }
 
 // 创建提醒窗口的函数 - 支持多屏幕
@@ -464,7 +464,6 @@ function setupActivityMonitoring() {
     
     // 监听键盘事件
     keyboard.addListener(function(e) {
-      console.log('keyboard activity detected！')
       updateLastActivity()
       
     })
