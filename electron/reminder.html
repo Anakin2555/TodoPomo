@@ -6,14 +6,12 @@
   <style>
     :root {
       --primary-color: #04decffb;
-      --bg-primary: var(--primary-color);
       --text-primary: #03352f;
       --text-secondary: rgba(255, 255, 255, 0.7);
     }
 
     body {
       margin: 0;
-      background-color: var(--bg-primary);
       -webkit-backdrop-filter: blur(8px);
       backdrop-filter: blur(8px);
       display: flex;
@@ -226,8 +224,6 @@
           document.getElementById('audio-status').className = 'error-message';
           document.getElementById('audio-status').textContent = `休息结束音频错误: ${e.target.error.message || '未知错误'}`;
         });
-
-        
 
         // 显示提醒内容
         if(data.text===''){

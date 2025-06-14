@@ -248,7 +248,7 @@ function createWindow() {
 }
 
 // 创建提醒窗口的函数 - 支持多屏幕
-function createReminderWindow(text, duration) {
+function createReminderWindow(text, duration,breakType) {
   // 获取所有显示器
   const displays = screen.getAllDisplays()
   reminderWindows = []
@@ -261,7 +261,7 @@ function createReminderWindow(text, duration) {
     const reminderWindow = new BrowserWindow({
       width: 1200,
       height: 800,
-      backgroundColor: '#00F2EA', // 设置主题色
+      backgroundColor: breakType==='long'?'#ffffff':'#00F2EA', // 设置主题色
       titleBarStyle: 'customButtonsOnHover', // macOS 特定的标题栏样式
       // autoHideMenuBar: false,
       // transparent: true,
@@ -302,6 +302,7 @@ function createReminderWindow(text, duration) {
       reminderWindow.webContents.send('reminder-data', { 
         text, 
         duration,
+        breakType,
         startAudioPath: path.join(__dirname, 'assets', 'break-start.wav'),
         endAudioPath: path.join(__dirname, 'assets', 'break-end.wav'),
         displayId: display.id
@@ -537,7 +538,7 @@ ipcMain.on('show-break-reminder', (event, data) => {
 
   lastActivityTime = Date.now() 
   console.log('show-break-reminder',data)
-  createReminderWindow(data.text, data.duration)
+  createReminderWindow(data.text, data.duration,data.breakType)
   
   // console.log(event,data)
 })

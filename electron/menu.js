@@ -100,6 +100,7 @@ function createMenu(mainWindow) {
         {
           label: '专注时长（多久长休息一次）',
           submenu: [
+            createMenuItem('0.5分钟', 0.5, 'focusDuration', 'focus-duration-changed', mainWindow),
             createMenuItem('5分钟', 5, 'focusDuration', 'focus-duration-changed', mainWindow),
             createMenuItem('25分钟', 25, 'focusDuration', 'focus-duration-changed', mainWindow),
             createMenuItem('30分钟', 30, 'focusDuration', 'focus-duration-changed', mainWindow),
