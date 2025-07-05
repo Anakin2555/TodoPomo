@@ -3,7 +3,7 @@ const { GlobalKeyboardListener } = require('node-global-key-listener')
 const robot = require('robotjs')
 const path = require("path")
 const Store = require('electron-store')
-const { createMenu } = require(path.join(__dirname, 'menu.js'))
+const { createMenu, settingsStore } = require(path.join(__dirname, 'menu.js'))
 
 const store = new Store({
   name: 'todo-pomodoro',
@@ -215,25 +215,15 @@ function createWindow() {
 
 
   // 创建菜单并传入参数
-  createMenu(mainWindow, {
-    getAutoLaunchStatus: () => {
-      return app.getLoginItemSettings().openAtLogin
-    },
-    setAutoLaunch: (enable) => {
-      app.setLoginItemSettings({
-        openAtLogin: enable,
-        path: process.execPath
-      })
-      return app.getLoginItemSettings().openAtLogin
-    }
-  })
+  createMenu(mainWindow)
+
   setTimeout(() => {
     setupActivityMonitoring()
   }, 5000)
 }
 
 // 创建提醒窗口的函数 - 支持多屏幕
-function createReminderWindow(text, duration) {
+function createReminderWindow(text, duration, breakType) {
   // 获取所有显示器
   const displays = screen.getAllDisplays()
   reminderWindows = []
@@ -241,9 +231,10 @@ function createReminderWindow(text, duration) {
   // 在每个显示器上创建提醒窗口
   displays.forEach((display) => {
     const { bounds } = display
-    
-    // 创建窗口，位置和大小与显示器匹配
-    const reminderWindow = new BrowserWindow({
+    const fullScreen = settingsStore.get('fullScreen')
+    console.log('fullScreen',fullScreen)
+
+    const fullscreenOptions = {
       width: bounds.width,
       height: bounds.height,
       x: bounds.x,
@@ -255,6 +246,7 @@ function createReminderWindow(text, duration) {
       skipTaskbar: true,
       resizable: false,  // 禁止调整窗口大小
       movable: false,    // 禁止移动窗口
+      backgroundColor: breakType === 'long' ? '#ffffff' : '#00f2ea',
       fullscreenable: true,
       kiosk: true,       // 启用kiosk模式，可以帮助禁用某些系统快捷键
       webPreferences: {
@@ -262,101 +254,71 @@ function createReminderWindow(text, duration) {
         contextIsolation: false,
         devTools: false  // 禁用开发者工具
       }
-    })
+    }
+    const windowScreenOptions = {
+      width: 1200,
+      height: 800,
+      frame: false,
+      alwaysOnTop: true,
+      menuBarVisible: false,
+      backgroundColor: breakType === 'long' ? '#ffffff' : '#00f2ea',
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+        devTools: false  // 禁用开发者工具
+      }
+    }
+    // 创建窗口，位置和大小与显示器匹配
+    const reminderWindow = new BrowserWindow(fullScreen ? fullscreenOptions : windowScreenOptions)
 
-    
     
     // 加载提醒页面
     reminderWindow.loadFile(path.join(__dirname, 'reminder.html'))
 
-    // 设置窗口为全屏
-    reminderWindow.setFullScreen(true)
-    
-    // 禁用窗口的最大化、最小化和关闭按钮
-    reminderWindow.setMinimizable(false)
-    reminderWindow.setMaximizable(false)
-    
-    // 设置窗口始终保持在最顶层
-    reminderWindow.setAlwaysOnTop(true, 'screen-saver')
-    
-    // 监听窗口获取焦点事件，确保窗口始终保持焦点
-    reminderWindow.on('blur', () => {
-      reminderWindow.focus()
-    })
-    
+
     // 在页面加载完成后，注册全局快捷键拦截
     reminderWindow.webContents.on('did-finish-load', () => {
       // 发送数据到渲染进程
       reminderWindow.webContents.send('reminder-data', { 
         text, 
         duration,
+        breakType,
         startAudioPath: path.join(__dirname, 'assets', 'break-start.wav'),
         endAudioPath: path.join(__dirname, 'assets', 'break-end.wav'),
         displayId: display.id
       })
-      
-      // 注入JavaScript来捕获和阻止键盘事件
-      reminderWindow.webContents.executeJavaScript(`
-        // document.addEventListener('keydown', (e) => {
-        //   // 阻止所有键盘事件
-        //   e.preventDefault();
-        //   e.stopPropagation();
-        //   return false;
-        // }, true);
-        
-        // 禁用右键菜单
-        document.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          return false;
-        }, true);
-      `)
-    })
-    
-    // // 注册全局快捷键拦截器
-    // const { globalShortcut } = require('electron')
-    
-    // // 根据操作系统确定要拦截的快捷键
-    // const isMac = process.platform === 'darwin'
-    
-    // // 尝试拦截常见的系统快捷键
-    // const shortcutsToBlock = [
-    //   'Alt+Tab', 'Alt+F4', 
-    //   'F11', 'Ctrl+Esc', 'Alt+Esc'
-    // ]
-    
-    // // 添加特定于操作系统的快捷键
-    // if (isMac) {
-    //   // macOS 特定快捷键
-    //   shortcutsToBlock.push(
-    //     'Command+Tab', 'Command+Space', 'Command+Q',
-    //     'Command+H', 'Command+M', 'Command+`',
-    //     'Command+W', 'Command+Option+Esc'
-    //   )
-    // } else {
-    //   // Windows 特定快捷键
-    //   shortcutsToBlock.push(
-    //     'CommandOrControl+Tab', 
-    //     'CommandOrControl+Alt+Delete', 'CommandOrControl+Shift+Esc'
-    //   )
-    // }
-    
-    // shortcutsToBlock.forEach(shortcut => {
-    //   try {
-    //     globalShortcut.register(shortcut, () => {
-    //       // 不执行任何操作，只是拦截快捷键
-    //       console.log(`Blocked shortcut: ${shortcut}`)
-    //       return false
-    //     })
-    //   } catch (error) {
-    //     console.log(`Failed to register shortcut: ${shortcut}`, error)
-    //   }
-    // })
-    
-    // // 确保在窗口关闭时取消注册所有快捷键
-    // reminderWindow.on('closed', () => {
-    //   globalShortcut.unregisterAll()
-    // })
 
+      // 监听窗口获取焦点事件，确保窗口始终保持焦点
+      reminderWindow.on('blur', () => {
+        reminderWindow.focus()
+      })
+      
+      if(fullScreen){
+        // 禁用窗口的最大化、最小化和关闭按钮
+        reminderWindow.setMinimizable(false)
+        reminderWindow.setMaximizable(false)
+        reminderWindow.setResizable(false)
+        // 设置窗口为全屏
+        reminderWindow.setFullScreen(true)
+        // 设置窗口始终保持在最顶层
+        reminderWindow.setAlwaysOnTop(true, 'screen-saver')
+        // 注入JavaScript来捕获和阻止键盘事件
+        reminderWindow.webContents.executeJavaScript(`
+          // document.addEventListener('keydown', (e) => {
+          //   // 阻止所有键盘事件
+          //   e.preventDefault();
+          //   e.stopPropagation();
+          //   return false;
+          // }, true);
+          
+          // 禁用右键菜单
+          document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            return false;
+          }, true);
+        `)
+      }
+    })
     reminderWindows.push(reminderWindow)
   })
 
@@ -527,7 +489,7 @@ ipcMain.on('show-break-reminder', (event, data) => {
 
   lastActivityTime = Date.now() 
   console.log('show-break-reminder',data)
-  createReminderWindow(data.text, data.duration)
+  createReminderWindow(data.text, data.duration, data.breakType)
   
   // console.log(event,data)
 })

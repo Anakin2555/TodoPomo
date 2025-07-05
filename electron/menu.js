@@ -2,7 +2,7 @@ const { app, Menu } = require('electron')
 const Store = require('electron-store')
 
 // 创建 store 实例
-const store = new Store({
+const settingsStore = new Store({
   name: 'settings',
   defaults: {
     autoLaunch: false,
@@ -10,17 +10,19 @@ const store = new Store({
     shortBreakInterval: 15,     // 小憩间隔（分钟）
     shortBreakDuration: 30,     // 小憩时长（秒）
     longBreakDuration: 5,       // 长休息时长（分钟）
-    dailyFocusTarget: 8         // 每日目标（小时）
+    dailyFocusTarget: 8,        // 每日目标（小时）
+    fullScreen: false           // 全屏模式
   }
 })
+
 
 function createMenuItem(label, value, settingKey, eventName, mainWindow) {
   return {
     label,
     type: 'radio',
-    checked: store.get(settingKey) === value,
+    checked: settingsStore.get(settingKey) === value,
     click: (menuItem, browserWindow) => {
-      store.set(settingKey, value)
+      settingsStore.set(settingKey, value)
       mainWindow?.webContents.send(eventName, value)
     }
   }
@@ -31,7 +33,7 @@ function createMenu(mainWindow) {
   
   // 获取自动启动状态
   function getAutoLaunchStatus() {
-    return store.get('autoLaunch')
+    return settingsStore.get('autoLaunch')
   }
 
   // 设置自动启动
@@ -40,7 +42,7 @@ function createMenu(mainWindow) {
       openAtLogin: enable,
       path: process.execPath
     })
-    store.set('autoLaunch', enable)
+    settingsStore.set('autoLaunch', enable)
     return enable
   }
   
@@ -94,6 +96,14 @@ function createMenu(mainWindow) {
             const result = await setAutoLaunch(menuItem.checked)
             menuItem.checked = result
             mainWindow?.webContents.send('auto-launch-changed', result)
+          }
+        },
+        {
+          label: '全屏模式',
+          type: 'checkbox',
+          checked: settingsStore.get('fullScreen'),
+          click: (menuItem) => {
+            settingsStore.set('fullScreen', menuItem.checked)
           }
         },
         { type: 'separator' },
@@ -185,12 +195,13 @@ function createMenu(mainWindow) {
     setTimeout(() => {
       // 获取所有配置并发送到渲染进程
       const settings = {
-        autoLaunch: store.get('autoLaunch'),
-        focusDuration: store.get('focusDuration'),
-        shortBreakInterval: store.get('shortBreakInterval'),
-        shortBreakDuration: store.get('shortBreakDuration'),
-        longBreakDuration: store.get('longBreakDuration'),
-        dailyFocusTarget: store.get('dailyFocusTarget')
+        autoLaunch: settingsStore.get('autoLaunch'),
+        focusDuration: settingsStore.get('focusDuration'),
+        shortBreakInterval: settingsStore.get('shortBreakInterval'),
+        shortBreakDuration: settingsStore.get('shortBreakDuration'),
+        longBreakDuration: settingsStore.get('longBreakDuration'),
+        dailyFocusTarget: settingsStore.get('dailyFocusTarget'),
+        fullScreen: settingsStore.get('fullScreen')
       }
 
       console.log('Sending settings to renderer:', settings)
@@ -206,4 +217,4 @@ function createMenu(mainWindow) {
   })
 }
 
-module.exports = { createMenu }
+module.exports = { createMenu,settingsStore }
