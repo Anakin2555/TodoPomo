@@ -23,6 +23,7 @@ function createMenuItem(label, value, settingKey, eventName, mainWindow) {
     checked: settingsStore.get(settingKey) === value,
     click: (menuItem, browserWindow) => {
       settingsStore.set(settingKey, value)
+      console.log(settingsStore.get(settingKey))
       mainWindow?.webContents.send(eventName, value)
     }
   }
@@ -128,7 +129,8 @@ function createMenu(mainWindow) {
             createMenuItem('15分钟', 15, 'shortBreakInterval', 'short-break-interval-changed', mainWindow),
             createMenuItem('20分钟', 20, 'shortBreakInterval', 'short-break-interval-changed', mainWindow),
             createMenuItem('25分钟', 25, 'shortBreakInterval', 'short-break-interval-changed', mainWindow),
-            createMenuItem('30分钟', 30, 'shortBreakInterval', 'short-break-interval-changed', mainWindow)
+            createMenuItem('30分钟', 30, 'shortBreakInterval', 'short-break-interval-changed', mainWindow),
+            createMenuItem('无小憩', 120, 'shortBreakInterval', 'short-break-interval-changed', mainWindow)
           ]
         },
         {

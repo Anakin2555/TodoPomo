@@ -16,6 +16,7 @@ const isToday = ref(true)
 const focusRecords = ref([])
 const totalFocusTime = ref(0)
 const monthRecords = ref({}) // 存储当月每天是否有记录的数据
+const taskRecords = ref([])
 
 // 月份名称常量
 const MONTH_NAMES = [
@@ -76,8 +77,9 @@ const loadDayRecords = async (date) => {
     const dateStr = formatDate(date)
     const records = await window.electronAPI.loadFocusHistory(dateStr)
     const dailyFocusTime = await window.electronAPI.loadTotalFocusTime(dateStr)
-    
-    focusRecords.value = records || []
+
+    taskRecords.value = records.tasks || []
+    focusRecords.value = records.focusHistory || []
     totalFocusTime.value = dailyFocusTime || 0
   } catch (error) {
     console.error('加载日期记录失败:', error)
@@ -254,7 +256,27 @@ onMounted(async () => {
             </div>
           </header>
 
+
           <div class="history-list">
+
+            <div class="history-task-list-header">
+              <h3>TODO</h3>
+            </div>
+            <div class="history-task-list">
+                <div class="task-text-container" v-for="task in taskRecords" :key="task.id">
+                  <div class="task-text-container-left">
+                    <input type="checkbox" v-model="task.completed" style="cursor: not-allowed;" disabled />
+                    <span class="task-text">{{task.text}}</span>
+                  </div>
+                  <div class="task-text-container-right">
+                    <div class="task-duration">
+                      {{task.completedTime}}/{{ task.totalTime }}
+                    </div>
+                  </div>
+                  
+                </div>
+            </div>
+
             <!-- 无记录提示 -->
             <div v-if="focusRecords.length === 0" class="no-records">
               暂无专注记录
@@ -591,5 +613,36 @@ onMounted(async () => {
 .record-duration {
   color: #888;
   font-size: 14px;
+}
+
+
+.task-text-container{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.task-text-container-left{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-text-container-right{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-task-list-header{
+  font-weight: 800;
+}
+
+.history-task-list{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 </style> 

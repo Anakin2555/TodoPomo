@@ -69,18 +69,9 @@ const handleSubmit = () => {
 }
 
 const handleDelete = () => {
-  showDeleteConfirm.value = true
-}
-
-const confirmDelete = () => {
-  showDeleteConfirm.value = false
   document.body.style.overflow = 'auto'
   emit('close')
   emit('delete', props.task.id)
-}
-
-const cancelDelete = () => {
-  showDeleteConfirm.value = false
 }
 
 onUnmounted(() => {
@@ -139,7 +130,7 @@ onMounted(() => {
   </div>
 
   <!-- 删除确认对话框 -->
-  <div v-if="showDeleteConfirm" class="confirm-overlay">
+  <!-- <div v-if="showDeleteConfirm" class="confirm-overlay">
     <div class="confirm-dialog">
       <h3>删除确认</h3>
       <p>确定要删除这个任务吗？此操作无法撤销。</p>
@@ -148,7 +139,7 @@ onMounted(() => {
         <button class="delete-button" @click="confirmDelete">删除</button>
       </div>
     </div>
-  </div>
+  </div> -->
 </template>
 
 <style scoped>

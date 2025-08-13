@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 
 const emit = defineEmits(['close', 'import'])
@@ -8,6 +8,27 @@ const emit = defineEmits(['close', 'import'])
 const previousTasks = ref([])
 // 选中的任务ID
 const selectedTaskIds = ref([])
+
+// 计算属性：是否全选
+const isAllSelected = computed(() => {
+  return previousTasks.value.length > 0 && selectedTaskIds.value.length === previousTasks.value.length
+})
+
+// 计算属性：是否部分选中
+const isIndeterminate = computed(() => {
+  return selectedTaskIds.value.length > 0 && selectedTaskIds.value.length < previousTasks.value.length
+})
+
+// 全选/取消全选
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    // 取消全选
+    selectedTaskIds.value = []
+  } else {
+    // 全选
+    selectedTaskIds.value = previousTasks.value.map(task => task.id)
+  }
+}
 
 // 获取前一天的任务
 const loadPreviousTasks = async () => {
@@ -28,13 +49,14 @@ const loadPreviousTasks = async () => {
 const handleImport = () => {
   const tasksToImport = previousTasks.value.filter(task => 
     selectedTaskIds.value.includes(task.id)
-  ).map(task => ({
+  ).map((task,index) => ({
     ...task,
-    id: Date.now() + Math.random(), // 生成新的ID
+    id: Date.now() + index, // 生成新的ID
     completed: false,
     completedTime: 0
   }))
-  
+  tasksToImport.reverse()
+  console.log('tasksToImport',tasksToImport)
   emit('import', tasksToImport)
   emit('close')
 }
@@ -59,6 +81,20 @@ onMounted(() => {
         </div>
         
         <div v-else class="task-list">
+          <!-- 全选框 -->
+          <div class="select-all-container">
+            <label class="checkbox-label select-all-label">
+              <input 
+                type="checkbox" 
+                :checked="isAllSelected"
+                :indeterminate="isIndeterminate"
+                @change="toggleSelectAll"
+              >
+              <span class="select-all-text">Select All</span>
+              <span class="select-count">({{ selectedTaskIds.length }}/{{ previousTasks.length }})</span>
+            </label>
+          </div>
+          
           <div 
             v-for="task in previousTasks" 
             :key="task.id"
@@ -66,7 +102,7 @@ onMounted(() => {
           >
             <label class="checkbox-label">
               <input 
-                type="checkbox" 
+                type="checkbox"
                 :value="task.id"
                 v-model="selectedTaskIds"
               >
@@ -105,7 +141,7 @@ onMounted(() => {
 }
 
 .modal-content {
-  background-color: var(--mid-grey);
+  background-color: var(--dark-grey);
   border-radius: 10px;
   width: 90%;
   max-width: 500px;
@@ -155,6 +191,28 @@ onMounted(() => {
   gap: 10px;
 }
 
+.select-all-container {
+  padding: 10px;
+  border-radius: 8px;
+  background-color: var(--dark-grey);
+  /* border-bottom: 2px solid var(--primary-color); */
+}
+
+.select-all-label {
+  font-weight: bold;
+}
+
+.select-all-text {
+  flex: 1;
+  color: var(--primary-color);
+}
+
+.select-count {
+  color: var(--bright-grey);
+  font-size: 14px;
+  font-weight: normal;
+}
+
 .task-item {
   padding: 10px;
   border-radius: 8px;
@@ -177,29 +235,7 @@ onMounted(() => {
   font-size: 14px;
 }
 
-input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  border: 2px solid var(--primary-color);
-  appearance: none;
-  cursor: pointer;
-  position: relative;
-}
 
-input[type="checkbox"]:checked {
-  background-color: var(--primary-color);
-}
-
-input[type="checkbox"]:checked::after {
-  content: '✓';
-  position: absolute;
-  color: black;
-  font-size: 14px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
 
 .modal-footer {
   padding: 20px;

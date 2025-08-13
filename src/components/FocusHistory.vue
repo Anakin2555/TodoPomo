@@ -143,7 +143,7 @@ const loadHistory = async () => {
   try {
     const history = await window.electronAPI.loadFocusHistory(formatDate(new Date()))
     console.log('Loaded focus history:', history)
-    focusHistory.value = history || []
+    focusHistory.value = history.focusHistory || []
     if(focusHistory.value.length > 0) {
       startHour.value = Number(focusHistory.value[0].startTime.split(':')[0])
     }
@@ -241,6 +241,7 @@ defineExpose({
   left: 6px;
   right: 0px;
   border-radius: 4px;
+  border-top: 1px solid #1e1e1e;
   display: flex;
   justify-content: space-between;
   align-items: center;

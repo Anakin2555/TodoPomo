@@ -113,19 +113,6 @@ const addTask = async () => {
   }
 }
 
-// 更新任务
-const updateTask = async (task,isIdle = false,ctx) => {
-  if (!task) return
-  console.log('updatedTask', {...task})
-
-  // 如果是因为idle触发保存，则结束时间减去5分钟idle时间
-  // if(isIdle&&ctx!=='lock-screen'){
-  //   task.completedTime = Math.max(0, task.completedTime - 5)
-  // }
-  await window.electronAPI.updateTask({...task})
-  tasks.value = await window.electronAPI.loadTasks()
-}
-
 // 删除任务
 const deleteTask = async (task) => {
   await window.electronAPI.deleteTask(task.id)
@@ -245,8 +232,7 @@ const resetTimer = async (isIdle = false, ctx) => {
 
   // 先保存当前的专注记录
   if (focusStartTime.value) {
-    updateTask(currentTask.value,isIdle, ctx)
-    await saveToStorage(isIdle)
+    await saveToStorage(isIdle,currentTask.value)
   }
   
   
@@ -295,7 +281,10 @@ const formatDate = (date) => {
 }
 
 // 保存专注记录
-const saveToStorage = async (isIdle = false, taskName = currentTask.value?.text || '专注') => {
+const saveToStorage = async (isIdle = false, task) => {
+
+  console.log('saveToStorage:', isIdle, task)
+
   // 如果idle，则结束时间减去5分钟idle时间
   const endTime = new Date(isIdle ? Date.now() - 1000 * 60 * 5 : Date.now())
   
@@ -303,24 +292,33 @@ const saveToStorage = async (isIdle = false, taskName = currentTask.value?.text 
   const endTimeStr = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`
   const startTimeStr = `${focusStartTime.value.getHours().toString().padStart(2, '0')}:${focusStartTime.value.getMinutes().toString().padStart(2, '0')}`
   
-  const duration = Math.floor((endTime - focusStartTime.value) / 1000 / 60)
+  const duration = endTime.getHours()*60+endTime.getMinutes()-focusStartTime.value.getHours()*60-focusStartTime.value.getMinutes()
   console.log('duration', duration)
+  console.log('startTimeStr-endTimeStr',startTimeStr,endTimeStr)
   
   if (duration > 4) {
+    // duration=duration>FOCUS_TIME.value/60?FOCUS_TIME.value/60:duration
     await window.electronAPI.addFocusRecord({
       date: endTime.toISOString().split('T')[0],
-      taskName: taskName,
+      taskId: task?.id || '',
+      taskName: task?.text || '专注',
       startTime: startTimeStr,
       endTime: endTimeStr,
       duration: duration
     })
   }
 
+  // 存储专注时间段后再去更新任务的时间存储
+  if(task){
+    console.log('updateTask',task)
+    await window.electronAPI.updateTask({...task})
+  }
+
   // 刷新历史记录
   if (historyRef.value) {
     historyRef.value.loadHistory()
   }
-  
+  tasks.value = await window.electronAPI.loadTasks()
   totalFocusTime.value = await window.electronAPI.loadTotalFocusTime(formatDate(new Date()))
 }
 
@@ -334,7 +332,7 @@ const handleSystemIdle = (event, isIdle, ctx) => {
   if (isIdle) {
     // 监测到idle，重置计时器
     resetTimer(isIdle, ctx)
-    currentTask.value = null
+    // currentTask.value = null
     console.log('监测到idle')
   } else if (!isIdle && !isRunning.value && !isPause.value) {
     // 监测到active，重新开始计时器
@@ -399,14 +397,10 @@ const calculateProgressWidth = (focusTime) => {
 // ======================================================================
 // 监听当前任务变化，保存专注记录
 watch(currentTask, async (newTask, oldTask) => {
-  console.log('currentTask', newTask, oldTask)
-  if(newTask.id===oldTask?.id) return
-  // if (!hasSaved.value) {
-  //   hasSaved.value = true
-    updateTask(currentTask.value) // 存储任务时间
-    await saveToStorage(false, oldTask?.text || '专注')  // 添加任务时间段
-    focusStartTime.value = new Date()
-  // }
+  console.log('currentTaskChanged:', newTask, oldTask)
+  if(newTask?.id===oldTask?.id) return
+  await saveToStorage(false, oldTask)  // 中途切换任务时存储任务时间段
+  focusStartTime.value = new Date()
 })
 
 // 监听剩余时间分钟数变化
@@ -451,42 +445,41 @@ watch(timeLeftMinutes, (newVal, oldVal) => {
 
     // 如果选择了任务，则更新任务的已完成时间
     if (currentTask.value) {
-      tasks.value.find(task => task.id === currentTask.value.id).completedTime++
-      // currentTask.value.completedTime++
-      const curTask={
-        text: currentTask.value.text,
-        completedTime: currentTask.value.completedTime,
-        totalTime: currentTask.value.totalTime
+      const curTask = tasks.value.find(task => task.id === currentTask.value.id)
+      console.log('completedTime++',curTask.completedTime)
+      if (curTask.completedTime < curTask.totalTime) {        
+        curTask.completedTime++
       }
 
       // 到时提醒
-      if(curTask.completedTime===curTask.totalTime-15){
+      if(curTask.completedTime ===curTask.totalTime-15){
         window.electronAPI.showNotification({
           title: '任务即将到时',
           body: `距离任务到时 "${curTask.text}" 还有15分钟`
         })
       }
-      else if(curTask.completedTime===curTask.totalTime-5){
+      else if(curTask.completedTime ===curTask.totalTime-5){
         window.electronAPI.showNotification({
           title: '任务即将到时',
           body: `距离任务到时 "${curTask.text}" 还有5分钟`
         })
       }
-      else if(curTask.completedTime===curTask.totalTime-1){ 
+      else if(curTask.completedTime ===curTask.totalTime-1){ 
         window.electronAPI.showNotification({
           title: '任务即将到时',
           body: `距离任务到时 "${curTask.text}" 还有1分钟`
         })
       }
-      else if (curTask.completedTime >= curTask.totalTime) {
-        currentTask.value.completed = true
-        
+      else if (curTask.completedTime >= curTask.totalTime) {        
         window.electronAPI.showNotification({
           title: '任务到时提醒',
           body: `任务 "${curTask.text}" 到时了！`
         })
         
         // updateTask(currentTask.value)
+        // if(curTask.completedTime>=curTask.totalTime){
+        //   curTask.completedTime=curTask.totalTime
+        // }
         currentTask.value = null
       }
     }
@@ -610,7 +603,7 @@ const handleTaskUpdate = async (updatedTask) => {
   const index = tasks.value.findIndex(t => t.id === updatedTask.id)
   if (index !== -1) {
     tasks.value[index] = updatedTask
-    await window.electronAPI.updateTask(updatedTask)
+    await window.electronAPI.updateTask({...updatedTask})
   }
   // 如果编辑的任务是当前任务，则要重新设定当前任务，否则已选任务是编辑前的任务
   if(currentTask.value?.id===updatedTask.id) {
@@ -625,6 +618,17 @@ const handleTaskDelete = async (taskId) => {
   if (currentTask.value?.id === taskId) {
     currentTask.value = null
   }
+}
+
+// 处理任务完成状态
+const handleTaskComplete = async (task) => {
+  console.log('handleTaskComplete',task)
+  task.completed = !task.completed
+  if(task.completed&&task.id===currentTask.value?.id) {
+    currentTask.value.completed = true
+    currentTask.value=null
+  }
+  await window.electronAPI.updateTask({...task})
 }
 
 // 修改后：使用动态导入
@@ -794,14 +798,15 @@ const handleImportTasks = async (tasksToImport) => {
             class="todo-item"
             :class="{
               'active-task': currentTask?.id === task.id,
-              'completed-task': task.completed 
+              'completed-task': task.completed||task.completedTime>=task.totalTime
             }"
-            @click.stop="!task.completed && startNewTask(task)"
+            @click.stop="!task.completed && task.completedTime<task.totalTime && startNewTask(task)"
           >
             <div class="todo-content">
               <div class="task-details">
                 <div class="task-text-container">
-                  <span :class="{ completed: task.completed }">{{ task.text }}</span>
+                  <input type="checkbox" @click.stop="handleTaskComplete(task)" v-model="task.completed" />
+                  <span class="task-text" :class="{ completed: task.completed }">{{ task.text }}</span>
                   
                   <!-- 编辑按钮 -->
                   <button 
@@ -1259,7 +1264,8 @@ button {
   color: #000;
 }
 .todo-item {
-  padding: 15px;
+  margin-top: 6px;
+  padding: 10px 12px;
   border-radius: 16px;
   border-bottom: 1px solid var(--light-grey);
   transition: background-color 0.3s ease;
@@ -1325,7 +1331,10 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
+  font-size: 14px;
 }
+
+
 
 .task-score {
   background-color: var(--light-grey);
