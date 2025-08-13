@@ -99,7 +99,7 @@ function createMenu(mainWindow) {
           }
         },
         {
-          label: '全屏模式',
+          label: '全屏模式提醒',
           type: 'checkbox',
           checked: settingsStore.get('fullScreen'),
           click: (menuItem) => {

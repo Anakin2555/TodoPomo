@@ -66,6 +66,7 @@
     "deasync": "^0.1.30",
     "electron-store": "^4.0.0",
     "node-global-key-listener": "^0.3.0",
+    "play-sound": "^1.1.6",
     "robotjs": "^0.6.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"

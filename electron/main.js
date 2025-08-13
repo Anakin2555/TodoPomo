@@ -28,6 +28,7 @@ const store = new Store({
 
 console.log(store.store)
 let mainWindow
+let notificationWindow
 let tray = null
 let lastActivityTime = Date.now()
 let lastMousePosition = robot.getMousePos()
@@ -37,6 +38,10 @@ let reminderWindows = []
 let reminderTimer=null
 let isTimerRunning = true
 let isFirstCheck = true
+
+// 添加通知节流相关变量
+let lastIdleWarningTime = 0
+const IDLE_WARNING_COOLDOWN = 20 * 1000 // 20s冷却时间
 
 // 获取应用锁
 const gotTheLock = app.requestSingleInstanceLock()
@@ -98,10 +103,12 @@ app.whenReady().then(() => {
     // 恢复活动监控
     setupActivityMonitoring()
 
+    mainWindow?.webContents.send('refresh-data')
+
     setTimeout(() => {
       // 暂停番茄钟计时器
       isIdle = true
-      mainWindow?.webContents.send('system-idle', true)
+      mainWindow?.webContents.send('system-idle', true,'unlock-screen')
       console.log('系统唤醒重置计时器')
     }, 2000)
   })
@@ -126,7 +133,7 @@ app.whenReady().then(() => {
     
     // 例如：暂停番茄钟计时器
     isIdle = true
-    mainWindow?.webContents.send('system-idle', true)
+    mainWindow?.webContents.send('system-idle', true, 'lock-screen')
     console.log('息屏发送idle信号')
 
     // 停止活动监控
@@ -260,7 +267,8 @@ function createReminderWindow(text, duration, breakType) {
       height: 800,
       frame: false,
       alwaysOnTop: true,
-      menuBarVisible: false,
+      menuBarVisible: true,
+      autoHideMenuBar: false,
       backgroundColor: breakType === 'long' ? '#ffffff' : '#00f2ea',
       webPreferences: {
         nodeIntegration: true,
@@ -283,7 +291,7 @@ function createReminderWindow(text, duration, breakType) {
         text, 
         duration,
         breakType,
-        startAudioPath: path.join(__dirname, 'assets', 'break-start.wav'),
+        startAudioPath: path.join(__dirname, 'assets', 'break-start-new.wav'),
         endAudioPath: path.join(__dirname, 'assets', 'break-end.wav'),
         displayId: display.id
       })
@@ -303,20 +311,20 @@ function createReminderWindow(text, duration, breakType) {
         // 设置窗口始终保持在最顶层
         reminderWindow.setAlwaysOnTop(true, 'screen-saver')
         // 注入JavaScript来捕获和阻止键盘事件
-        reminderWindow.webContents.executeJavaScript(`
-          // document.addEventListener('keydown', (e) => {
-          //   // 阻止所有键盘事件
-          //   e.preventDefault();
-          //   e.stopPropagation();
-          //   return false;
-          // }, true);
+        // reminderWindow.webContents.executeJavaScript(`
+        //   // document.addEventListener('keydown', (e) => {
+        //   //   // 阻止所有键盘事件
+        //   //   e.preventDefault();
+        //   //   e.stopPropagation();
+        //   //   return false;
+        //   // }, true);
           
-          // 禁用右键菜单
-          document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            return false;
-          }, true);
-        `)
+        //   // 禁用右键菜单
+        //   document.addEventListener('contextmenu', (e) => {
+        //     e.preventDefault();
+        //     return false;
+        //   }, true);
+        // `)
       }
     })
     reminderWindows.push(reminderWindow)
@@ -329,13 +337,16 @@ function createReminderWindow(text, duration, breakType) {
         window.close()
       }
     })
+    new Notification({
+      title: '休息结束！',
+      body: '选择任务开始专注啦！',
+      silent: false
+    }).show()
+    
     isIdle = true
     console.log('休息结束进入idle状态')
     setupActivityMonitoring()
-  }, duration * 1000+4000)
-
-  // 返回窗口数组，以便在需要时可以从外部控制
-  
+  }, duration * 1000+4000)  
 }
 
 // 检查用户鼠标活动
@@ -371,15 +382,20 @@ function checkUserActivity() {
       return
     }
 
-    // 如果超过4.5分钟无活动并且之前不是idle状态则提醒即将进入idle
-    if(idleTime >= 4.5 * 60 * 1000 && idleTime < 5 * 60 * 1000){
+    // 如果超过4分钟无活动并且之前不是idle状态则提醒即将进入idle
+    if(idleTime >= 4 * 60 * 1000 && idleTime < 5 * 60 * 1000){
       if(!isIdle){
-        // 发送系统通知提醒用户
-        new Notification({
-          title: '即将进入空闲状态！',
-          body: '检测到很久没有活动，即将暂停计时器',
-          silent: false
-        }).show()
+        const currentTime = Date.now()
+        // 检查是否在冷却期内
+        if (currentTime - lastIdleWarningTime > IDLE_WARNING_COOLDOWN) {
+          // 发送系统通知提醒用户
+          new Notification({
+            title: '即将进入空闲状态！',
+            body: '检测到很久没有活动，即将暂停计时器',
+            silent: false
+          }).show()
+          lastIdleWarningTime = currentTime
+        }
       }
     }
     
@@ -389,7 +405,7 @@ function checkUserActivity() {
       lastActivityTime = Date.now() // 防止idle后一直发送消息
       console.log('5分钟无活动进入idle状态')
       // 通知渲染进程
-      mainWindow?.webContents.send('system-idle', true)
+      mainWindow?.webContents.send('system-idle', true, 'check-user-activity')
     }
     
   } catch (error) {
@@ -406,7 +422,7 @@ function updateLastActivity() {
   // 如果状态从idle变为active，通知渲染进程
   if (previousState) {
     console.log('从idle状态恢复，当前时间:', new Date().toLocaleTimeString())
-    mainWindow?.webContents.send('system-idle', false)
+    mainWindow?.webContents.send('system-idle', false,'check-user-activity')
   }
 }
 
@@ -546,6 +562,13 @@ ipcMain.handle('update-task', (event, task) => {
   if (dailyRecords[today]) {
     const index = dailyRecords[today].tasks.findIndex(t => t.id === task.id)
     if (index !== -1) {
+      const records = dailyRecords[today].focusHistory
+      task.completedTime = records.reduce((acc,record)=>{
+        if(record.taskName===task.text){
+          acc += record.duration
+        }
+        return acc
+      },0)
       dailyRecords[today].tasks[index] = task
       store.set('dailyRecords', dailyRecords)
     }
@@ -675,7 +698,7 @@ ipcMain.handle('load-tasks-by-date', (event, date) => {
   return record.tasks
 })
 
-// 添加 IPC 处理程序
+// 创建系统自带提醒
 ipcMain.on('show-notification', (event, options) => {
   console.log('show-notification', options)
   const notification = new Notification({
@@ -685,6 +708,13 @@ ipcMain.on('show-notification', (event, options) => {
     appId: 'TodoPomo',
     icon: path.join(__dirname, 'assets/icon.png')
   })
+  // if (mainWindow) {
+  //   if (mainWindow.isMinimized()) {
+  //     mainWindow.restore()
+  //   }
+  //   mainWindow.show()
+  //   mainWindow.focus()
+  // }
 
   // 添加点击事件处理
   notification.on('click', () => {
@@ -701,6 +731,56 @@ ipcMain.on('show-notification', (event, options) => {
   })
 
   notification.show()
+})
+
+ipcMain.on('show-notification-explicit', (event, options) => {
+  console.log('show-notification-explicit', options)
+  // 获取主屏幕尺寸
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const { width, height } = primaryDisplay.workAreaSize
+
+
+  // 创建通知窗口
+  if(notificationWindow&&!notificationWindow.isDestroyed()){
+    return
+  }
+  notificationWindow = new BrowserWindow({
+    width: 400,
+    height: 120,
+    x: Math.floor(width / 2 - 200),  // 居中显示
+    y: Math.floor(height / 2 - 60),
+    frame: false,  // 无边框
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#252525',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  })
+
+  // 加载通知HTML内容
+  notificationWindow.loadFile(path.join(__dirname, 'notification.html'))
+
+  // 在页面加载完成后发送通知数据
+  notificationWindow.webContents.on('did-finish-load', () => {
+    notificationWindow.webContents.send('notification-data', {
+      title: options.title || '提醒',
+      body: options.body || '',
+    })
+  })
+})
+
+// 添加处理打开主窗口的IPC监听器
+ipcMain.on('open-main-window', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+    mainWindow.show()
+    mainWindow.focus()
+  }
 })
 
 // 监听渲染进程发来的状态更新
@@ -753,8 +833,7 @@ app.on('before-quit', async () => {
   app.isQuitting = true
   
   // 发送 idle 信号给渲染进程，触发保存操作
-  mainWindow?.webContents.send('system-idle', true)
-        
+  mainWindow?.webContents.send('system-idle', true,'before-quit')
   // 等待一小段时间确保渲染进程有足够时间保存数据
   await new Promise(resolve => setTimeout(resolve, 3000))
   

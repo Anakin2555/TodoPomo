@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>通知</title>
+  <style>
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: #252525;
+      color: #ffffff;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      cursor: pointer;
+      overflow: hidden;
+      border-radius: 8px;
+      border: 1px solid #333;
+      box-sizing: border-box;
+    }
+
+    .notification {
+      margin-left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+      justify-content: center;
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #00F2EA;
+      margin: 0;
+    }
+
+    .body {
+      font-size: 14px;
+      margin: 0;
+      color: #e0e0e0;
+    }
+
+    /* 添加鼠标悬停效果 */
+    body:hover {
+      background-color: #2a2a2a;
+    }
+  </style>
+</head>
+<body>
+  <div class="notification">
+    <h3 class="title" id="notification-title"></h3>
+    <p class="body" id="notification-body"></p>
+  </div>
+
+  <script>
+    // 接收通知数据
+    require('electron').ipcRenderer.on('notification-data', (event, data) => {
+      document.getElementById('notification-title').textContent = data.title
+      document.getElementById('notification-body').textContent = data.body
+    })
+
+    // 点击关闭窗口并打开主窗口
+    document.addEventListener('click', (event) => {
+      // 发送消息给主进程打开主窗口
+      require('electron').ipcRenderer.send('open-main-window')
+      window.close()
+    })
+  </script>
+</body>
+</html> 

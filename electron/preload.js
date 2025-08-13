@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSystemIdle: (callback) => {
     ipcRenderer.on('system-idle', callback)
   },
+  onRefreshData: (callback) => {
+    ipcRenderer.on('refresh-data', callback)
+  },
+  removeRefreshDataListener: (callback) => {
+    ipcRenderer.removeListener('refresh-data', callback)
+  },
   removeSystemIdleListener: (callback) => {
     ipcRenderer.removeListener('system-idle', callback)
   },
@@ -35,6 +41,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('daily-focus-target-changed',(_,value)=>callback(value)),
 
   showNotification: (options) => ipcRenderer.send('show-notification', options),
+
+  showNotificationExplicit: (options) => ipcRenderer.send('show-notification-explicit', options),
 
   updateTimerStatus: (status, needCleanupActivity) => {
     ipcRenderer.send('update-timer-status', status, needCleanupActivity)
