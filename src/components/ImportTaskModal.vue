@@ -55,7 +55,6 @@ const handleImport = () => {
     completed: false,
     completedTime: 0
   }))
-  tasksToImport.reverse()
   console.log('tasksToImport',tasksToImport)
   emit('import', tasksToImport)
   emit('close')

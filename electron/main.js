@@ -184,6 +184,18 @@ app.whenReady().then(() => {
     // })
 
     createTray()
+
+     // 监听 menu 发过来的事件
+    ipcMain.on('menu-setting-changed', (event, { key, value }) => {
+        console.log('主进程收到设置更新:', key, value);
+        if(key === 'activityMonitoring'){
+            if(value){
+                setupActivityMonitoring()
+            }else{
+                cleanupActivityMonitoring()
+            }
+        }
+    });
 })
 
 // 创建主窗口
@@ -264,10 +276,8 @@ function createReminderWindow(text, duration, breakType) {
         const windowScreenOptions = {
                 width: 1200,
                 height: 800,
-                frame: false,
                 alwaysOnTop: true,
-                menuBarVisible: true,
-                autoHideMenuBar: false,
+                icon: path.join(__dirname, 'assets/icon.png'),
                 backgroundColor: breakType === 'long' ? '#ffffff' : '#00f2ea',
                 webPreferences: {
                     nodeIntegration: true,
@@ -427,6 +437,10 @@ function updateLastActivity() {
 
 // 设置活动监控
 function setupActivityMonitoring() {
+    if (!settingsStore.get('activityMonitoring')) {
+        console.log('activityMonitoring is false,不进行活动监控')
+        return
+    }
     try {
         // 未解锁时不进行活动监控
         if (powerMonitor.getSystemIdleState(1) === 'locked') {
@@ -509,6 +523,16 @@ ipcMain.on('show-break-reminder', (event, data) => {
     // console.log(event,data)
 })
 
+// 监听清理活动监控的消息
+ipcMain.on('change-activity-monitoring', (event, checked) => {
+    console.log('Received change-activity-monitoring request')
+    if (checked) {
+        setupActivityMonitoring()
+    } else {
+        cleanupActivityMonitoring()
+    }
+})
+
 // 获取当天日期字符串
 function getTodayString() {
     const now = new Date()
@@ -518,15 +542,15 @@ function getTodayString() {
     return `${year}-${month}-${day}`
 }
 
-function getYesterdayString() {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1); // 设置为昨天
-    const year = yesterday.getFullYear();
-    const month = String(yesterday.getMonth() + 1).padStart(2, '0'); // 月份从0开始
-    const day = String(yesterday.getDate()).padStart(2, '0');
+// function getYesterdayString() {
+//     const yesterday = new Date();
+//     yesterday.setDate(yesterday.getDate() - 1); // 设置为昨天
+//     const year = yesterday.getFullYear();
+//     const month = String(yesterday.getMonth() + 1).padStart(2, '0'); // 月份从0开始
+//     const day = String(yesterday.getDate()).padStart(2, '0');
 
-    return `${year}-${month}-${day}`; // 返回格式为 YYYY-MM-DD
-}
+//     return `${year}-${month}-${day}`; // 返回格式为 YYYY-MM-DD
+// }
 
 
 // 获取或创建某天的记录
@@ -551,7 +575,7 @@ ipcMain.handle('add-task', (event, task) => {
     if (!dailyRecords[today]) {
         dailyRecords[today] = { tasks: [], totalFocusTime: 0 }
     }
-    dailyRecords[today].tasks.unshift(task)
+    dailyRecords[today].tasks.push(task)
     store.set('dailyRecords', dailyRecords)
     return task
 })

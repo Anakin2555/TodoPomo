@@ -105,7 +105,7 @@ const addTask = async () => {
     }
     
     await window.electronAPI.addTask(task)
-    tasks.value.unshift(task)
+    tasks.value.push(task)
     
     newTask.value.text = ''
     newTask.value.totalSegments = 2
@@ -190,6 +190,13 @@ const startTimer = () => {
     isStart.value = true
     isPause.value = false
     window.electronAPI.updateTimerStatus(true)
+
+    if(!currentTask.value){
+      window.electronAPI.showNotification({
+        title: '任务选择提醒',
+        body: `请选择或新建一个任务`
+      })
+    }
 
     timer.value = setInterval(() => {
       if (timeLeft.value > 0) {
@@ -413,8 +420,8 @@ watch(timeLeftMinutes, (newVal, oldVal) => {
     noTaskCounter.value = 0
   }
   
-  if(noTaskCounter.value >= 3) {
-    window.electronAPI.showNotificationExplicit({
+  if(noTaskCounter.value >= 5) {
+    window.electronAPI.showNotification({
       title: '任务选择提醒',
       body: '请选择或新建一个任务'
     })
@@ -652,7 +659,7 @@ const handleImportTasks = async (tasksToImport) => {
   // 添加非重复的任务
   for (const task of uniqueTasks) {
     await window.electronAPI.addTask(task);
-    tasks.value.unshift(task);
+    tasks.value.push(task);
   }
 
   // 显示导入结果
@@ -1398,8 +1405,8 @@ button:hover:not(:disabled) {
 .focus-button {
   background-color: var(--primary-color);
   color: var(--dark-grey);
-  padding: 0px 16px;
-  height: 28px;
+  padding: 2px 16px 0px 16px;
+  height: 24px;
   border-radius: 14px;
   font-size: 12px;
 }
@@ -1462,10 +1469,7 @@ button:hover:not(:disabled) {
 }
 
 .task-time-info {
-  display: flex;
-  align-items: center;
   gap: 10px;
-  margin-top: 8px;
   font-size: 14px;
   color: #888;
 }
@@ -1495,12 +1499,14 @@ button:hover:not(:disabled) {
 
 .time-progress {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   margin-left: 10px;
 }
 
 .time-text {
   font-size: 12px;
-  margin-bottom: 4px;
 }
 
 .progress-bar {

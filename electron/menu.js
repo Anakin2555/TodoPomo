@@ -1,4 +1,4 @@
-const { app, Menu } = require('electron')
+const { app, Menu, ipcMain } = require('electron')
 const Store = require('electron-store')
 
 // 创建 store 实例
@@ -11,7 +11,8 @@ const settingsStore = new Store({
     shortBreakDuration: 30,     // 小憩时长（秒）
     longBreakDuration: 5,       // 长休息时长（分钟）
     dailyFocusTarget: 8,        // 每日目标（小时）
-    fullScreen: false           // 全屏模式
+    fullScreen: false,          // 全屏模式
+    activityMonitoring: true   // 活动监控
   }
 })
 
@@ -105,6 +106,18 @@ function createMenu(mainWindow) {
           checked: settingsStore.get('fullScreen'),
           click: (menuItem) => {
             settingsStore.set('fullScreen', menuItem.checked)
+          }
+        },
+        {
+          label:'活动监控',
+          type:'checkbox',
+          checked:settingsStore.get('activityMonitoring'),
+          click: (menuItem) => {
+            settingsStore.set('activityMonitoring', menuItem.checked)
+            ipcMain.emit('menu-setting-changed', null, {
+              key: 'activityMonitoring',
+              value: menuItem.checked
+            });
           }
         },
         { type: 'separator' },
@@ -203,7 +216,8 @@ function createMenu(mainWindow) {
         shortBreakDuration: settingsStore.get('shortBreakDuration'),
         longBreakDuration: settingsStore.get('longBreakDuration'),
         dailyFocusTarget: settingsStore.get('dailyFocusTarget'),
-        fullScreen: settingsStore.get('fullScreen')
+        fullScreen: settingsStore.get('fullScreen'),
+        activityMonitoring: settingsStore.get('activityMonitoring')
       }
 
       console.log('Sending settings to renderer:', settings)
@@ -215,8 +229,10 @@ function createMenu(mainWindow) {
       mainWindow.webContents.send('short-break-duration-changed', settings.shortBreakDuration)
       mainWindow.webContents.send('break-duration-changed', settings.longBreakDuration)
       mainWindow.webContents.send('daily-focus-target-changed', settings.dailyFocusTarget)
+      mainWindow.webContents.send('activity-monitoring-changed', settings.activityMonitoring)
     }, 2000) // 延迟 2 秒
   })
 }
+
 
 module.exports = { createMenu,settingsStore }

@@ -244,7 +244,7 @@
           document.getElementById('progressFill').style.width = `${progress}%`;
         }
         
-        const timer = setInterval(() => {
+        const timer = setInterval(async () => {
           timeLeft--;
           const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
           const seconds = (timeLeft % 60).toString().padStart(2, '0');
@@ -253,9 +253,8 @@
           
           if (timeLeft <= 0) {
             clearInterval(timer);
-            endAudio.play().then(() => {
-              setTimeout(() => window.close(), 3000);
-            });
+            await endAudio.play();
+            setTimeout(() => window.close(), 3000);
           }
         }, 1000);
 
