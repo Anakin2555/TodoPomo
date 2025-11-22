@@ -3,8 +3,25 @@ const { GlobalKeyboardListener } = require('node-global-key-listener')
 const robot = require('robotjs')
 const path = require("path")
 const Store = require('electron-store')
+const { systemNotify }=require(path.join(__dirname,'utils/notification.js'))
 const { createMenu, settingsStore } = require(path.join(__dirname, 'menu.js'))
+const { desktopCapturer } = require('electron')
 
+// 创建全局键盘监听器
+const keyboard = new GlobalKeyboardListener()
+// const { bluetooth }=require('node-ble')
+
+
+
+
+// 获取系统最上层窗口
+async function getTopWindow() {
+  const sources = await desktopCapturer.getSources({ types: ['window'] })
+  
+  return sources[0].name
+}
+
+// const ble=bluetooth()
 const store = new Store({
     name: 'todo-pomodoro',
     defaults: {
@@ -62,6 +79,7 @@ app.on('blur', (event) => {
     }
 })
 
+
 app.on('focus', (event) => {
     if (isWindows && needsFocusFix) {
         needsFocusFix = false;
@@ -90,7 +108,7 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
 })
 
 // 确保在app准备就绪后再设置监听器
-app.whenReady().then(() => {
+app.whenReady().then(async() => {
     if (BrowserWindow.getAllWindows().length === 0) {
         console.log('createWindow')
         createWindow()
@@ -100,16 +118,23 @@ app.whenReady().then(() => {
     powerMonitor.on('unlock-screen', () => {
         console.log('屏幕亮屏')
 
+        
+
         // 恢复活动监控
         setupActivityMonitoring()
 
+        // 如果还在强制休息中则不
+        if(reminderTimer||reminderWindows.length>0){
+            return
+        }
+        
         mainWindow?.webContents.send('refresh-data')
-        setTimeout(() => {
-            // 暂停番茄钟计时器
-            isIdle = true
-            mainWindow?.webContents.send('system-idle', true, 'unlock-screen')
-            console.log('系统唤醒重置计时器')
-        }, 2000)
+        // setTimeout(() => {
+        //     // 暂停番茄钟计时器
+        //     isIdle = true
+        //     mainWindow?.webContents.send('system-idle', true, 'unlock-screen')
+        //     console.log('系统唤醒重置计时器')
+        // }, 2000)
     })
 
     // 监听屏幕锁定事件
@@ -197,6 +222,46 @@ app.whenReady().then(() => {
         }
     });
 })
+
+// === 蓝牙事件处理 ===
+ipcMain.handle('ble:scan', async () => {
+    const adapter = await ble.defaultAdapter();
+    await adapter.open();
+
+    const devices = [];
+
+    adapter.on('device', device => {
+        devices.push({
+        address: device.address,
+        name: device.name,
+        });
+    });
+
+    await adapter.startDiscovery();
+    console.log('Scanning for BLE devices...');
+    await new Promise(r => setTimeout(r, 5000)); // 扫描5秒
+    await adapter.stopDiscovery();
+    console.log('Scan complete.');
+
+    return devices;
+});
+
+ipcMain.handle('ble:connect', async (event, address) => {
+    const adapter = await ble.defaultAdapter();
+    const device = await adapter.waitDevice(address);
+    await device.connect();
+    console.log(`Connected to ${address}`);
+    return { connected: true };
+});
+
+ipcMain.handle('ble:disconnect', async (event, address) => {
+    const adapter = await ble.defaultAdapter();
+    const device = await adapter.waitDevice(address);
+    await device.disconnect();
+    console.log(`Disconnected from ${address}`);
+    return { disconnected: true };
+});
+  
 
 // 创建主窗口
 function createWindow() {
@@ -347,11 +412,7 @@ function createReminderWindow(text, duration, breakType) {
                 window.close()
             }
         })
-        new Notification({
-            title: '休息结束！',
-            body: '选择任务开始专注啦！',
-            silent: false
-        }).show()
+        systemNotify('休息结束！','选择任务开始专注啦！',false,3000)
 
         isIdle = true
         console.log('休息结束进入idle状态')
@@ -362,6 +423,12 @@ function createReminderWindow(text, duration, breakType) {
 // 检查用户鼠标活动
 function checkUserActivity() {
     try {
+        // 获取最上层应用窗口
+        // getTopWindow().then(window => {
+        //     console.log('topWindow', window)
+        // })
+
+
         // 获取当前鼠标位置
         const currentMousePos = robot.getMousePos()
 
@@ -399,11 +466,7 @@ function checkUserActivity() {
                     // 检查是否在冷却期内
                 if (currentTime - lastIdleWarningTime > IDLE_WARNING_COOLDOWN) {
                     // 发送系统通知提醒用户
-                    new Notification({
-                        title: '即将进入空闲状态！',
-                        body: '检测到很久没有活动，即将暂停计时器',
-                        silent: false
-                    }).show()
+                    systemNotify('即将进入空闲状态！','检测到很久没有活动，即将暂停计时器。',false,6000)
                     lastIdleWarningTime = currentTime
                 }
             }
@@ -451,9 +514,6 @@ function setupActivityMonitoring() {
 
         isFirstCheck = true
 
-        // 创建全局键盘监听器
-        const keyboard = new GlobalKeyboardListener()
-
         // 监听键盘事件
         keyboard.addListener(function(e) {
             updateLastActivity()
@@ -466,7 +526,7 @@ function setupActivityMonitoring() {
 
         // 设置检查间隔（建议改为更短的间隔，比如5秒）
         cleanupActivityMonitoring()
-        activityCheckInterval = setInterval(checkUserActivity, 5000)
+        activityCheckInterval = setInterval(checkUserActivity, 10000)
         console.log('setup activity monitoring')
 
     } catch (error) {
@@ -481,6 +541,11 @@ function cleanupActivityMonitoring() {
         clearInterval(activityCheckInterval)
         activityCheckInterval = null
     }
+    // 取消键盘监听
+    keyboard.removeListener(function(e) {
+        updateLastActivity()
+    })
+
 }
 
 function createTray() {
@@ -727,36 +792,30 @@ ipcMain.handle('load-tasks-by-date', (event, date) => {
 // 创建系统自带提醒
 ipcMain.on('show-notification', (event, options) => {
     console.log('show-notification', options)
-    const notification = new Notification({
-            title: options.title || '提醒',
-            body: options.body || '',
-            silent: false,
-            appId: 'TodoPomo',
-            icon: path.join(__dirname, 'assets/icon.png')
-        })
-        // if (mainWindow) {
-        //   if (mainWindow.isMinimized()) {
-        //     mainWindow.restore()
-        //   }
-        //   mainWindow.show()
-        //   mainWindow.focus()
-        // }
+    systemNotify(options.title||'提醒',options.body||'',false,'TodoPomo',path.join(__dirname,'assets/icon.png'))
+    
+    // if (mainWindow) {
+    //   if (mainWindow.isMinimized()) {
+    //     mainWindow.restore()
+    //   }
+    //   mainWindow.show()
+    //   mainWindow.focus()
+    // }
 
     // 添加点击事件处理
-    notification.on('click', () => {
-        // 确保主窗口存在
-        if (mainWindow) {
-            // 如果窗口最小化了，恢复它
-            if (mainWindow.isMinimized()) {
-                mainWindow.restore()
-            }
-            // 显示并聚焦窗口
-            mainWindow.show()
-            mainWindow.focus()
-        }
-    })
+    // n.on('click', () => {
+    //     // 确保主窗口存在
+    //     if (mainWindow) {
+    //         // 如果窗口最小化了，恢复它
+    //         if (mainWindow.isMinimized()) {
+    //             mainWindow.restore()
+    //         }
+    //         // 显示并聚焦窗口
+    //         mainWindow.show()
+    //         mainWindow.focus()
+    //     }
+    // })
 
-    notification.show()
 })
 
 ipcMain.on('show-notification-explicit', (event, options) => {

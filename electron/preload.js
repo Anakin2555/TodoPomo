@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // 蓝牙通信
+  scan: () => ipcRenderer.invoke('ble:scan'),
+  connect: (address) => ipcRenderer.invoke('ble:connect', address),
+  disconnect: (address) => ipcRenderer.invoke('ble:disconnect', address),
+
+  
   showBreakReminder: (data) => ipcRenderer.send('show-break-reminder', data),
   addTask: (task) => ipcRenderer.invoke('add-task', task),
   updateTask: (task) => ipcRenderer.invoke('update-task', task),
@@ -39,6 +45,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   onDailyFocusTargetChanged: (callback)=>
     ipcRenderer.on('daily-focus-target-changed',(_,value)=>callback(value)),
+  
+  onTaskSelectionReminderChanged: (callback)=>
+    ipcRenderer.on('task-selection-reminder-changed',(_,value)=>callback(value)),
 
   showNotification: (options) => ipcRenderer.send('show-notification', options),
 

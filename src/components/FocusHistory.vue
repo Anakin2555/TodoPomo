@@ -5,7 +5,7 @@
       <div class="timeline-axis">
         <div 
           v-for="(time, index) in timeSlots" 
-          :key="time" 
+          :key="time"
           class="time-slot"
           :style="{ visibility: index === 0 ? 'hidden' : 'visible' }"
         >

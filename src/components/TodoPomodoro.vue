@@ -8,6 +8,7 @@ import IconEdit from './icons/IconEdit.vue'
 import FocusHistory from './FocusHistory.vue'
 import TaskEditModal from './TaskEditModal.vue'
 import ImportTaskModal from './ImportTaskModal.vue'
+import Device from './Device.vue'
 
 // ======================================================================
 // 配置和常量
@@ -17,6 +18,7 @@ const SHORT_BREAK_TIME = ref(30)         // 30秒短休息
 const LONG_BREAK_TIME = ref(5 * 60)      // 5分钟长休息
 const SHORT_BREAK_INTERVAL = ref(15 * 60) // 每15分钟提醒一次短休息
 const DAILY_FOCUS_TARGET = ref(8 * 60)   // 每日目标专注时间（8小时）
+const TASK_SELECTION_REMINDER=ref(true)
 
 // ======================================================================
 // 状态管理
@@ -191,7 +193,8 @@ const startTimer = () => {
     isPause.value = false
     window.electronAPI.updateTimerStatus(true)
 
-    if(!currentTask.value){
+    if(!currentTask.value&&TASK_SELECTION_REMINDER.value){
+      console.log('start notask reminder!!!')
       window.electronAPI.showNotification({
         title: '任务选择提醒',
         body: `请选择或新建一个任务`
@@ -246,6 +249,7 @@ const resetTimer = async (isIdle = false, ctx) => {
   // hasSaved.value = false
   focusStartTime.value = null
   lastBreakTime.value = 0
+  noTaskCounter.value = 0
   timeLeft.value = FOCUS_TIME.value
   isStart.value = false
 }
@@ -303,7 +307,8 @@ const saveToStorage = async (isIdle = false, task) => {
   console.log('duration', duration)
   console.log('startTimeStr-endTimeStr',startTimeStr,endTimeStr)
   
-  if (duration > 4) {
+  // 如果时长小于5则忽略这段专注，注意排除任务剩余时间小于5的情况
+  if ((duration<=4&&task&&task.totalTime-task.completedTime<=4)||duration > 4) {
     // duration=duration>FOCUS_TIME.value/60?FOCUS_TIME.value/60:duration
     await window.electronAPI.addFocusRecord({
       date: endTime.toISOString().split('T')[0],
@@ -413,6 +418,8 @@ watch(currentTask, async (newTask, oldTask) => {
 // 监听剩余时间分钟数变化
 watch(timeLeftMinutes, (newVal, oldVal) => {
 
+  // 排除时间归零时timeLeftMinutes因为computed(timeleft-1/60)计算出-1的情况
+  if(newVal<0) return
   // 没有选择任务的计数器，如果三分钟没有选择任务，则提醒
   if(!currentTask.value&&newVal-oldVal===-1) {
     noTaskCounter.value++
@@ -420,7 +427,8 @@ watch(timeLeftMinutes, (newVal, oldVal) => {
     noTaskCounter.value = 0
   }
   
-  if(noTaskCounter.value >= 5) {
+  if(noTaskCounter.value >= 5&&newVal!==FOCUS_TIME.value/60&&TASK_SELECTION_REMINDER.value) { // 后面的这个判断是防止idle时notaskcounter不归零
+    console.log('noTaskCounter>5!!!!')
     window.electronAPI.showNotification({
       title: '任务选择提醒',
       body: '请选择或新建一个任务'
@@ -482,6 +490,7 @@ watch(timeLeftMinutes, (newVal, oldVal) => {
           title: '任务到时提醒',
           body: `任务 "${curTask.text}" 到时了！`
         })
+        // saveToStorage(false,curTask)
         
         // updateTask(currentTask.value)
         // if(curTask.completedTime>=curTask.totalTime){
@@ -555,6 +564,10 @@ onMounted(async () => {
 
   window.electronAPI.onDailyFocusTargetChanged((value) => {
     DAILY_FOCUS_TARGET.value = value * 60
+  })
+
+  window.electronAPI.onTaskSelectionReminderChanged((value) => {
+    TASK_SELECTION_REMINDER.value = value
   })
 
   // // 程序启动时延迟启动计时器，现在不需要了，因为主线程发送专注持续时间会自动开始计时
@@ -673,6 +686,9 @@ const handleImportTasks = async (tasksToImport) => {
 
 <template>
   <div class="todo-pomodoro">
+
+    
+
     <!-- 添加提示消息组件 -->
     <Transition name="slide-fade">
       <div v-if="showMessage" 
@@ -684,6 +700,9 @@ const handleImportTasks = async (tasksToImport) => {
 
     <!-- 番茄计时器部分 -->
     <div class="timer-section">
+
+      <!-- 蓝牙设备扫描 -->
+      <!-- <Device/> -->
 
       <!-- 计时器容器 -->
       <div class="timer-circle">

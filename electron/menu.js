@@ -109,6 +109,15 @@ function createMenu(mainWindow) {
           }
         },
         {
+          label:'任务选择提醒（未选择任务时提醒）',
+          type:'checkbox',
+          checked:settingsStore.get('taskSelectionReminder'),
+          click: (menuItem) => {
+            settingsStore.set('taskSelectionReminder', menuItem.checked)
+            mainWindow?.webContents.send('task-selection-reminder-changed', menuItem.checked)
+          }
+        },
+        {
           label:'活动监控',
           type:'checkbox',
           checked:settingsStore.get('activityMonitoring'),
@@ -230,6 +239,7 @@ function createMenu(mainWindow) {
       mainWindow.webContents.send('break-duration-changed', settings.longBreakDuration)
       mainWindow.webContents.send('daily-focus-target-changed', settings.dailyFocusTarget)
       mainWindow.webContents.send('activity-monitoring-changed', settings.activityMonitoring)
+      mainWindow.webContents.send('task-selection-reminder-changed', settings.taskSelectionReminder)
     }, 2000) // 延迟 2 秒
   })
 }

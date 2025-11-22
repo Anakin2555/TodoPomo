@@ -17,7 +17,7 @@ import TodoPomodoro from './components/TodoPomodoro.vue'
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #1E1E1E;
+  background-color: #010101;
   color: #FFFFFF;
 }
 

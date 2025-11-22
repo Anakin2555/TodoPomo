@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>选择蓝牙设备</title>
+  <style>
+    body { font-family: sans-serif; padding: 15px; }
+    select { width: 100%; height: 150px; font-size: 14px; }
+    button { width: 48%; margin: 5px 1%; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h3>选择要连接的设备</h3>
+  <select id="deviceList" size="8"></select>
+  <div>
+    <button id="selectBtn">连接</button>
+    <button id="cancelBtn">取消</button>
+  </div>
+
+  <script src="devicepicker.js"></script>
+</body>
+</html>
