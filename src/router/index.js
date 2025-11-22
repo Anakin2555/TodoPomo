@@ -1,5 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import TodoPomodoro from '../components/TodoPomodoro.vue'
+import TodoPomodoro from '../components/TodoPomodoro.recompose.vue'
 
 const routes = [
   {

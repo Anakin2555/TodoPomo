@@ -963,7 +963,7 @@ const handleImportTasks = async (tasksToImport) => {
 
   .timer-section {
     width: 320px;
-    height: 100vh;
+    height: calc(100vh-30px);
     margin-top: 50vh;
     transform: translateY(-50%); /* 垂直居中 */
     height: fit-content; /* 高度适应内容 */
@@ -985,7 +985,6 @@ const handleImportTasks = async (tasksToImport) => {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
-    background-color: var(--dark-grey);
     color: #FFFFFF;
   }
   .todo-section{
@@ -1217,9 +1216,11 @@ button {
 .todo-section {
   background-color: var(--mid-grey);
   border-radius: 10px;
+  border: 2px solid var(--light-grey);
   padding: 20px;
   padding-right: calc(20px + 8px); /* 原来的padding加上滚动条宽度 */
   width: 100%;
+
 }
 
 .section-header {

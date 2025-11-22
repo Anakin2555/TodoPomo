@@ -164,13 +164,15 @@ defineExpose({
 
 <style scoped>
 .focus-history {
-  background: #1E1E1E;
+  background: var(--mid-grey);
   border-radius: 10px;
+  border: 2px solid var(--light-grey);
   margin-bottom: 20px;
   padding: 0px;
 }
 
 .gantt-chart {
+  padding: 10px 20px;
   display: flex;
   position: relative;
   overflow: hidden;
@@ -212,7 +214,7 @@ defineExpose({
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #1E1E1E;
+  background: var(--mid-grey);
 }
 
 .time-grid {

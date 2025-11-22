@@ -23,10 +23,13 @@
   /* 主题色 */
   --primary-color: #00F2EA;
   --primary-color-transparent: #01fff7cb;
-  --dark-grey: #1e1e1e;
-  --mid-grey: #252525;
+  --dark-grey: #16151a;
+  --mid-grey: #1c1b1f;
   --light-grey: #333;
   --bright-grey: #888;
+
+  --bg-primary: #141317;
+  --text-primary: #FFFFFF;
 
   
   /* 边框样式 */

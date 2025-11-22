@@ -3,6 +3,9 @@ import TodoPomodoro from './components/TodoPomodoro.vue'
 </script>
 
 <template>
+  <div class="title-bar">
+    <div class="app-title">TodoPomo</div>
+  </div>
   <div class="app">
     <TodoPomodoro />
   </div>
@@ -17,8 +20,29 @@ import TodoPomodoro from './components/TodoPomodoro.vue'
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #010101;
-  color: #FFFFFF;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.title-bar {
+  height: 30px;
+  background: var(--bg-primary);
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  padding-left: 16px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  user-select: none;
+}
+
+.app-title {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .app {
@@ -26,9 +50,11 @@ body {
   align-items: center;
   min-height: 100vh;
 }
-@media screen and (min-width: 1000px) {
+
+
+@media screen and (max-width: 1100px) {
   .app{
-    margin-top: -20px;
+    margin-top: 40px;
   }
 } 
   

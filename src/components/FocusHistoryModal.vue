@@ -396,6 +396,7 @@ onMounted(async () => {
   flex: 0 0 400px;
   background-color: var(--mid-grey);
   border-radius: 16px;
+  border: 2px solid var(--light-grey);
   padding: 24px;
   height: fit-content;
 }
@@ -533,6 +534,7 @@ onMounted(async () => {
   flex: 1;
   background-color: var(--mid-grey);
   border-radius: 16px;
+  border: 2px solid var(--light-grey);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -590,13 +592,13 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: #252525;
+  background: var(--light-grey);
   border-radius: 8px;
   transition: all 0.3s ease;
 }
 
 .history-item:hover {
-  background: #2C2C2C;
+  background: var(--light-grey);
 }
 
 .record-time {
