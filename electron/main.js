@@ -277,6 +277,7 @@ function createReminderWindow(text, duration, breakType) {
                 width: 1200,
                 height: 800,
                 alwaysOnTop: true,
+                autoHideMenuBar: true,
                 icon: path.join(__dirname, 'assets/icon.png'),
                 backgroundColor: breakType === 'long' ? '#ffffff' : '#00f2ea',
                 webPreferences: {
